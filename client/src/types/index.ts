@@ -94,7 +94,14 @@ export interface ArgusEvent {
   lat: number | null
   lng: number | null
   geo_precision: GeoPrecision
-  body: CelestialBodyName | null
+  /**
+   * The celestial body as the model wrote it — "Mars", "Saturn's B Ring",
+   * "Carina Nebula" — not a CelestialBodyName. It is unvalidated prose and
+   * frequently names nothing in the body table at all, so resolve it through
+   * resolveOrbitalPlacement() rather than comparing or casting it. Typing it
+   * as CelestialBodyName is what hid a Mars event focusing on nothing.
+   */
+  body: string | null
   // Intelligence metadata
   actors: string[]          // Parsed from JSON string
   tags: string[]            // Parsed from JSON string

@@ -25,13 +25,41 @@ import { EventPanelBody }     from './EventPanelBody'
 import { Panel }              from './Panel'
 import { PanelTail }          from './PanelTail'
 import { eventSummary }       from '../../lib/eventText'
-import type { ArgusEvent }    from '../../types'
+import { resolveOrbitalPlacement } from '../../data/orbitalPlacement'
+import type { ArgusEvent, CelestialBodyName } from '../../types'
 
 
 /** Coordinates are resolved and persisted server-side, so an event either has
  *  a point to fly to or names no point at all. */
 function resolveEventLatLng(ev: ArgusEvent): { lat: number; lng: number } | null {
   if (ev.lat !== null && ev.lng !== null) return { lat: ev.lat, lng: ev.lng }
+  return null
+}
+
+type FocusTarget =
+  | { kind: 'surface'; lat: number; lng: number }
+  | { kind: 'body'; body: CelestialBodyName }
+
+/**
+ * Where the focus control should send the camera.
+ *
+ * Off-Earth events go through the same resolver the marker layer uses. Reading
+ * `event.body` directly does not work: the model writes prose ("Mars", "Saturn's
+ * B Ring") while the body table is keyed by lowercase ids, so a Mars event drew
+ * its marker correctly and then focused on nothing at all. The cast that used to
+ * sit here — `event.body as CelestialBodyName` — is what let that compile.
+ *
+ * Deep-space events return null deliberately. They have no ephemeris position,
+ * so the marker layer parks them at a fixed point rather than anchoring them to
+ * a body, and there is nothing for the camera to fly to.
+ */
+export function resolveFocusTarget(ev: ArgusEvent): FocusTarget | null {
+  if (ev.lat !== null && ev.lng !== null) return { kind: 'surface', lat: ev.lat, lng: ev.lng }
+
+  const placement = resolveOrbitalPlacement(ev.body, ev.location_label)
+  if (placement?.kind === 'body')       return { kind: 'body', body: placement.body }
+  // Satellites, launches and stations ride above Earth; Earth is the anchor.
+  if (placement?.kind === 'earthOrbit') return { kind: 'body', body: 'earth' }
   return null
 }
 
@@ -187,18 +215,20 @@ export function EventPanel() {
   // activePanelId in render, so it is never a step behind.
   function triggerFocus() {
     if (!event) return
-    const coords = resolveEventLatLng(event)
-    if (coords && focusOnEarthSurface) focusOnEarthSurface(coords.lat, coords.lng)
-    else if (event.body && event.body !== 'earth' && focusOn)
-      focusOn(event.body as import('../../types').CelestialBodyName)
+    const target = resolveFocusTarget(event)
+    if (!target) return
+    if (target.kind === 'surface') focusOnEarthSurface?.(target.lat, target.lng)
+    else                           focusOn?.(target.body)
   }
   // Keyed on the event's id rather than on activePanelId, so that selecting an
   // event whose row has not arrived in the store yet still focuses once it does
   // instead of being dropped.
   useEffect(() => { triggerFocus() }, [event?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canFocus = !!(event &&
-    (resolveEventLatLng(event) !== null || (event.body && event.body !== 'earth')))
+  // Same resolver as triggerFocus, so the control cannot offer a focus it will
+  // not perform — an enabled button that quietly does nothing is what a Mars
+  // event used to get.
+  const canFocus = !!(event && resolveFocusTarget(event))
 
   // ── SVG tail — reads via ref each rAF tick ─────────────────────────────────
   const eventRef   = useRef(event)

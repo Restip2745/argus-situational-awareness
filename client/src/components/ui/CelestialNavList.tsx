@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../../store'
 import { BODY_MAP } from '../../data/celestialBodies'
+import { resolveOrbitalPlacement } from '../../data/orbitalPlacement'
 import type { BodyDef } from '../../data/celestialBodies'
 import type { CelestialBodyName } from '../../types'
 
@@ -71,8 +72,14 @@ export function CelestialNavList() {
     }
   }, [levelSwitchAnim, navCandidates.length])
 
+  // Resolved rather than compared: `e.body` holds the model's prose ("Mars"),
+  // while bodyId is a lowercase table id, so a direct equality test counted
+  // zero events for every body the model happened to capitalise.
   function eventCountForBody(bodyId: CelestialBodyName): number {
-    return events.filter((e) => e.body === bodyId).length
+    return events.filter((e) => {
+      const placement = resolveOrbitalPlacement(e.body, e.location_label)
+      return placement?.kind === 'body' && placement.body === bodyId
+    }).length
   }
 
   function toggleGroup(groupKey: string) {
