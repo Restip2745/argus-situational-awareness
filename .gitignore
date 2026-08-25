@@ -11,3 +11,5 @@ data/secrets.json
 # Local agent/editor state: personal settings, scratch worktrees, and the
 # temp files the settings writer leaves behind.
 .claude/
+# Superseded database files kept as a rollback after the single-DB migration.
+*.superseded

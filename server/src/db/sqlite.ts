@@ -1,14 +1,17 @@
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
 import type { Article, OllamaClassification, ClientEvent, SourceReliability, MarketCommodity } from '../types'
 import { resolveLocation } from '../data/gazetteer'
 import { logger } from '../utils/logger'
+import { resolveDbPath } from '../config/paths'
 
 let db: Database.Database
 
 export function initDb(): void {
-  const dbPath = process.env.DB_PATH ?? join(process.cwd(), 'intelligence.db')
+  const dbPath = resolveDbPath()
+  // A fresh clone has no data/ until the first write lands.
+  if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true })
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')

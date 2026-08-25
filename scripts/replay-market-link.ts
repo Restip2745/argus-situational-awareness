@@ -21,8 +21,8 @@
 
 import Database from 'better-sqlite3'
 import { Ollama } from 'ollama'
-import { join } from 'path'
 import { SYSTEM_PROMPT, validateClassification } from '../server/src/services/ollama'
+import { resolveDbPath } from '../server/src/config/paths'
 
 /**
  * The prompt as it stood before this change, derived by surgery rather than
@@ -45,7 +45,7 @@ interface Row {
 }
 
 function loadArticles(limit: number, category?: string): Row[] {
-  const db = new Database(join(__dirname, '..', 'intelligence.db'), { readonly: true })
+  const db = new Database(resolveDbPath(), { readonly: true })
   try {
     // Narrowing to one stored category turns the harness into a check on a
     // deliberate boundary change: run the articles the old prompt put in a
