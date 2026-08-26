@@ -183,6 +183,33 @@ Strategic goals and milestone tracking for the ARGUS satellite/event tracker pro
 
 ---
 
+## Phase Q — Prediction Markets
+
+> Forward-looking market data for the events that have no listed instrument — elections, ceasefires, rate decisions, launch windows. Staged so that a mis-linked market is impossible before it is merely unlikely.
+
+**Stage 1 — global watchlist (no matching, no linkage)**
+
+- [ ] **Prediction service** — `server/src/services/prediction.ts`, shaped after `market.ts`: `parseMarket` split from the fetch so shape judgement is testable without the network; every unexpected upstream response fails to "not shown" rather than to a placeholder number; `MAX_SLUGS` cap per call so one panel cannot fan out. Cache TTL 60s — the 10-minute close-feed TTL does not carry over, its justification was that the market is shut most of the time and this one trades 24/7. Confirm Gamma/CLOB paths against the live API before implementing
+- [ ] **Prediction endpoints** — `GET /api/prediction/markets?slugs=…` and `GET /api/prediction/history?slug=…&range=…`; validators added to `server/src/utils/validation.ts` beside the existing ones; `checkRateLimit` applied to both
+- [ ] **Curated slug list** — `server/src/config/predictionMarkets.ts`, hand-maintained in the same spirit as `feeds.ts`. Stage 1 ships this and nothing else: no model, no text similarity, no auto-matching. No matching means no mis-matching, and it also keeps distasteful markets (casualty counts, death pools) off screen by construction
+- [ ] **Volume floor** — `MIN_VOLUME_USD` enforced in the parse layer, not the view. A market with $400 of volume prices identically to a liquid one; this is the dormant-GDR failure again — a wrong number that renders perfectly — so the row is dropped rather than annotated
+- [ ] **Watchlist panel** — question text rendered verbatim (never paraphrased: resolution criteria are the whole difference between near-duplicate markets), priced percentage, 24h change, resolution date, volume. Every row carries its resolution date for the same reason every quote row carries its as-of date
+- [ ] **Wording: "market price", not "probability"** — fees, cost of capital and longshot bias mean the two are not the same claim; i18n keys in both locales. Sits alongside the event panel's existing refusal to assert causation
+- [ ] **Outbound market links** — each row links out to its Polymarket event page (`target="_blank" rel="noopener noreferrer"`, external-link affordance), so a reader can check resolution criteria and depth at the source. The boundary: link out, nothing more — no wallet, no in-app order flow, no trade affordance. Restate "not an investment tool" in this context
+- [ ] **Timeline integration** — `prices-history` backs the 24h scrub so a market's price rewinds with the rest of the UI. Unlike stock closes this has real intraday shape, so it stays visible in retrospect mode rather than hiding with the live-only layers
+- [ ] **README + disclosure** — new row in 資料來源與授權 (Polymarket Gamma/CLOB, public read-only, no key); extend the privacy note — querying a market tells the upstream which event you are reading, same standing as Wikipedia and Yahoo
+- [ ] **Tests** — `parseMarket` shape guards, stale/closed markets, volume floor, endpoint validation, panel renders nothing on upstream failure; ≥12 new tests
+
+**Stage 2 — region panel (tag matching only)**
+
+- [ ] **Region markets row** — markets attached to a country by the upstream's own tags, still no model in the path; reuses the `RegionIndices` row pattern. Rows stop being hand-picked here, so an excluded-topic filter lands with this item
+
+**Stage 3 — per-event linkage (gated on 1–2 holding up)**
+
+- [ ] **Deterministic linkage, then measured** — candidate rule is resolution entity ∈ event actors AND time-window overlap AND volume floor, not a free-text model call: Polymarket's market space is open-ended, and `market_link` only stayed honest because its six values are a closed enum. Measure precision on a 200-article replay the way `relation` was measured, and delete the feature if it does not carry information rather than leaving it to look like a signal
+
+---
+
 ## Completed
 
 > Features fully implemented and stable.
