@@ -277,6 +277,12 @@ async function processOne(article: Article, io: Server): Promise<void> {
       const heatScore = calculateHeatScore(data)
       const expiresAt = calculateExpiresAt(heatScore)
 
+      // Event matching is deliberately not called here yet. The matcher and its
+      // column are in place and covered, but a dry run over the stored corpus
+      // still splits the Conakry collapse in two and files one of its reports
+      // with floods in Venezuela. Stage 1 exists to put a true source count on
+      // screen; a count drawn from that grouping would teach nothing. Wire this
+      // up when scripts/backfill-events.ts --dry-run reads clean.
       markAnalyzed(article.id, data, heatScore, expiresAt)
 
       // Re-read from DB to get the full row, then broadcast
