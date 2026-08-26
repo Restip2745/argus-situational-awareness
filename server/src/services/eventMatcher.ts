@@ -76,12 +76,46 @@ const EVIDENCE_RATIO = 0.4
  */
 const GENERIC_SHARE = 0.02
 
-/** …and a floor under it, so a corpus too small for the share to mean anything
- *  still admits the terms that only a handful of articles carry. */
-const MIN_SPECIFIC_DOCS = 3
+/**
+ * …and a floor under it, which for a term tied to one happening is the number
+ * that actually governs.
+ *
+ * A term naming an event does not grow with the corpus: one landfill collapse
+ * draws its handful of reports and stops, so `Guinea` sits at four whether the
+ * window holds a hundred articles or five hundred. A term naming a subject does
+ * grow — the more news there is, the more of it mentions Israel. A share alone
+ * therefore reads the same term differently at different window sizes, and it
+ * did: at 111 articles the two-percent bar fell to 3, `Guinea` at 4 was thrown
+ * out as generic, and two reports 800 metres apart in Conakry were left with no
+ * evidence between them.
+ */
+const MIN_SPECIFIC_DOCS = 8
 
 /** Countries and demonyms still carry evidence, but less of it. */
 const SUBJECT_WEIGHT = 0.6
+
+/**
+ * Two happenings in different places are different happenings.
+ *
+ * The resolver already writes coordinates on every geo article, and not using
+ * them was leaving the plainest signal on the table: a landfill collapse in
+ * Conakry was filed with floods in Venezuela and snow in Bolivia, five thousand
+ * kilometres apart, and a border complaint from Chad with an attack in South
+ * Kordofan. No amount of shared vocabulary should have survived that.
+ *
+ * Generous, because one article resolves to a city and the next to its country:
+ * Conakry sits 295km from the centroid the gazetteer gives for Guinea, and both
+ * are reporting the same collapse.
+ */
+const MAX_KM = 500
+
+/** Being in the same place is evidence, not merely permission. The tiers are
+ *  what let a Reuters report saying "Guinea's capital" rather than naming
+ *  Conakry rejoin the collapse it belongs to. */
+const SAME_PLACE_KM = 50
+const NEAR_PLACE_KM = 300
+const SAME_PLACE_EVIDENCE = 1.0
+const NEAR_PLACE_EVIDENCE = 0.5
 
 /** Below this, document frequency means nothing — every term looks rare in a
  *  handful of articles, and everything would match everything. A fresh install
@@ -216,6 +250,41 @@ const evidenceOf = (a: Set<string>, b: Set<string>, corpus: Corpus): number => {
   return total
 }
 
+/** Great-circle distance, or null when either side has no usable point. */
+function kmApart(a: Article, b: Article): number | null {
+  if (a.lat === null || a.lng === null || b.lat === null || b.lng === null) return null
+  const R = 6371
+  const rad = (d: number) => (d * Math.PI) / 180
+  const dLat = rad(b.lat - a.lat)
+  const dLng = rad(b.lng - a.lng)
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/**
+ * Whether two articles can be about one happening on the ground, and how much
+ * their location adds if they can.
+ *
+ * `null` means they cannot. Off-Earth articles carry no coordinates, so they
+ * are held to naming the same body instead — an APOD of the Perseids and a
+ * spacewalk are not one event just because both are SPACE.
+ */
+function placeAgreement(a: Article, b: Article): number | null {
+  const orbital = a.location_type === 'orbital' || b.location_type === 'orbital'
+  if (orbital) {
+    const sameBody = (a.body ?? '').toLowerCase() === (b.body ?? '').toLowerCase()
+    return sameBody && a.body ? SAME_PLACE_EVIDENCE : sameBody ? 0 : null
+  }
+
+  const km = kmApart(a, b)
+  if (km === null) return 0            // nothing resolved — neither helps nor blocks
+  if (km > MAX_KM) return null
+  if (km <= SAME_PLACE_KM) return SAME_PLACE_EVIDENCE
+  if (km <= NEAR_PLACE_KM) return NEAR_PLACE_EVIDENCE
+  return 0
+}
+
 const hoursApart = (a: string | null, b: string | null): number => {
   if (!a || !b) return Infinity
   const ta = Date.parse(a.replace(' ', 'T'))
@@ -260,7 +329,12 @@ export function findEvent(article: Article, recent: Article[]): string | null {
   let best: { id: string; hits: number } | null = null
 
   for (const [eventId, members] of events) {
-    if (members[0].article.category !== article.category) continue
+    // Category is deliberately not required. It gated this before the location
+    // did, and it turned out to cut across events rather than between them: the
+    // Islamabad hospital fire was filed under SOCIAL by one outlet and HEALTH by
+    // another, and the same fourteen deaths could not be recognised as one
+    // thing. Place and rare names now carry the decision, and they do not
+    // disagree with themselves about what kind of story this is.
 
     const memberTerms = members.map(
       (m) => new Set([...m.terms].filter((t) => corpus.evidential.has(t))),
@@ -275,10 +349,16 @@ export function findEvent(article: Article, recent: Article[]): string | null {
     if (!sharesCore) continue
 
     let hits = 0
+    let blocked = false
     for (let i = 0; i < members.length; i++) {
+      const place = placeAgreement(article, members[i].article)
+      // One member in the wrong hemisphere disqualifies the whole event: the
+      // article cannot be in two places, and the members are meant to be in one.
+      if (place === null) { blocked = true; break }
       if (hoursApart(article.published_at, members[i].article.published_at) > WINDOW_HOURS) continue
-      if (evidenceOf(mine, memberTerms[i], corpus) >= corpus.bar) hits++
+      if (evidenceOf(mine, memberTerms[i], corpus) + place >= corpus.bar) hits++
     }
+    if (blocked) continue
 
     if (hits >= Math.max(1, Math.ceil(members.length * MAJORITY))) {
       if (!best || hits > best.hits) best = { id: eventId, hits }

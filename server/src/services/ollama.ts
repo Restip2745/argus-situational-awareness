@@ -16,10 +16,12 @@ import {
   resetFailedArticles,
   getArticleById,
   articleToClientEvent,
+  getRecentAnalysed,
 } from '../db/sqlite'
 import { broadcastEvent } from './socket'
 import { resolveLocation } from '../data/gazetteer'
 import { getLlmConfig } from '../config/llmConfig'
+import { findEvent, CORPUS_HOURS } from './eventMatcher'
 
 // Ollama client is recreated per-call so host changes take effect immediately
 function getClient(): Ollama {
@@ -277,13 +279,35 @@ async function processOne(article: Article, io: Server): Promise<void> {
       const heatScore = calculateHeatScore(data)
       const expiresAt = calculateExpiresAt(heatScore)
 
-      // Event matching is deliberately not called here yet. The matcher and its
-      // column are in place and covered, but a dry run over the stored corpus
-      // still splits the Conakry collapse in two and files one of its reports
-      // with floods in Venezuela. Stage 1 exists to put a true source count on
-      // screen; a count drawn from that grouping would teach nothing. Wire this
-      // up when scripts/backfill-events.ts --dry-run reads clean.
-      markAnalyzed(article.id, data, heatScore, expiresAt)
+      // Which happening this is. Matching needs the classification — the
+      // location gates it and summary_en carries names the title leaves out —
+      // so it runs here rather than beside the fetch. A fault in it must not
+      // cost the article the classification it came for, hence the catch: an
+      // unmatched article stands alone, which is what the globe drew anyway.
+      let eventId: string | null = null
+      try {
+        eventId = findEvent(
+          {
+            ...article,
+            category:      data.category,
+            summary_en:    data.summary_en,
+            location_type: data.location.type,
+            lat:           data.location.lat,
+            lng:           data.location.lng,
+            body:          data.location.body,
+          },
+          // A week, not the three days a story may reach across to join an
+          // event: term rarity is measured against this and needs more news
+          // than the window itself holds to mean anything.
+          getRecentAnalysed(CORPUS_HOURS),
+        )
+      } catch (err) {
+        logger.warn('[Event]', 'Matching failed, article stands alone:', (err as Error).message)
+      }
+
+      // Its own id when nothing matched — a lone story is an event of one, and
+      // the source count needs something to group by either way.
+      markAnalyzed(article.id, data, heatScore, expiresAt, eventId ?? article.id)
 
       // Re-read from DB to get the full row, then broadcast
       const updated = getArticleById(article.id)

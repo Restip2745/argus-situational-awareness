@@ -225,11 +225,18 @@ export function getRecentAnalysed(hours: number): Article[] {
  * into hundreds.
  */
 let sourceCountsDirty = true
+let sourceCountsAt = 0
 let sourceCounts = new Map<string, number>()
+
+/** Belt as well as braces. The writes this process makes flip the flag, but
+ *  scripts/ writes to the same file — the event backfill assigns every row at
+ *  once — and nothing tells a running server that happened. A minute of
+ *  staleness on a source count is not worth a query per row to avoid. */
+const SOURCE_COUNT_TTL_MS = 60_000
 
 function eventSourceCount(eventId: string | null): number | null {
   if (!eventId) return null
-  if (sourceCountsDirty) {
+  if (sourceCountsDirty || Date.now() - sourceCountsAt > SOURCE_COUNT_TTL_MS) {
     const rows = getDb()
       .prepare(
         `SELECT event_id, COUNT(DISTINCT source) AS n FROM articles
@@ -238,6 +245,7 @@ function eventSourceCount(eventId: string | null): number | null {
       .all() as { event_id: string; n: number }[]
     sourceCounts = new Map(rows.map((r) => [r.event_id, r.n]))
     sourceCountsDirty = false
+    sourceCountsAt = Date.now()
   }
   return sourceCounts.get(eventId) ?? null
 }

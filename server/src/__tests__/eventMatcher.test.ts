@@ -108,13 +108,44 @@ describe('findEvent', () => {
     expect(findEvent(collapse({ source: 'France 24' }), pool)).toBe('guinea')
   })
 
-  it('refuses an event in another category', () => {
+  // One fire, filed under SOCIAL by one outlet and HEALTH by another, is still
+  // one fire. Category cuts across events rather than between them, so it does
+  // not gate — place and rare names decide.
+  it('joins across a disagreement about category', () => {
     const pool = [
       ...filler(24),
       collapse({ source: 'Reuters', event_id: 'guinea', category: 'SOCIAL' }),
       collapse({ source: 'Al Jazeera', event_id: 'guinea', category: 'SOCIAL' }),
     ]
-    expect(findEvent(collapse(), pool)).toBeNull()
+    expect(findEvent(collapse({ category: 'HEALTH' }), pool)).toBe('guinea')
+  })
+
+  // The plainest signal, and the one that was missing: a landfill collapse in
+  // Conakry had been filed with floods in Venezuela and snow in Bolivia.
+  it('refuses an event on the other side of the world', () => {
+    const conakry = { lat: 9.53, lng: -13.67 }
+    const pool = [
+      ...filler(24),
+      collapse({ source: 'Reuters', event_id: 'guinea', ...conakry }),
+      collapse({ source: 'Al Jazeera', event_id: 'guinea', ...conakry }),
+    ]
+    // Same words, same day, 5,900km away.
+    expect(findEvent(collapse({ lat: 8.0, lng: -66.0 }), pool)).toBeNull()
+  })
+
+  it('counts being in the same place as evidence', () => {
+    const conakry = { lat: 9.53, lng: -13.67 }
+    const pool = [
+      ...filler(24),
+      article({ title: 'Guinea landfill disaster', summary_en: 'A collapse in Guinea.',
+        source: 'Reuters', event_id: 'guinea', ...conakry }),
+      article({ title: 'Guinea landfill disaster toll rises', summary_en: 'A collapse in Guinea.',
+        source: 'Al Jazeera', event_id: 'guinea', ...conakry }),
+    ]
+    // Shares only the country, which alone would not clear the bar.
+    const thin = article({ title: "Rescuers search Guinea's capital", summary_en: null,
+      source: 'France 24', ...conakry })
+    expect(findEvent(thin, pool)).toBe('guinea')
   })
 
   it('refuses an event that has drifted outside the window', () => {
