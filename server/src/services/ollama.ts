@@ -38,6 +38,18 @@ Follow this schema exactly:
                               // ARMED_CONFLICT is fighting itself — strikes, attacks, casualties.
                               // Military policy, appointments, procurement and capability analysis are POLITICAL.
   "intensity": string,        // One of: LOW | MODERATE | HIGH | CRITICAL
+                              // Judge what has already happened, not what it might lead to.
+                              // CRITICAL: already at the top of its scale — 10+ killed in one
+                              //   incident, direct military exchange between states, a nuclear
+                              //   or chemical release, a government or capital falling, or a
+                              //   population-wide collapse of food, water, power or medical care.
+                              // HIGH: deaths or injuries below that scale, an armed attack, a
+                              //   declared national emergency, or a head of state or government
+                              //   personally at risk.
+                              // MODERATE: no casualties, but disruption already reaching a
+                              //   country's people, economy, or infrastructure.
+                              // LOW: announcements, statements, proposals, routine politics,
+                              //   sport, and anything whose effect has not yet been realised.
   "title_zh": string,         // Traditional Chinese (zh-TW) translation of the title, max 40 characters. Use Taiwanese conventions, not Simplified.
   "summary_en": string,       // One-sentence English summary of what happened, max 200 characters
   "summary_zh": string,       // The same summary in Traditional Chinese (zh-TW), max 120 characters
@@ -140,6 +152,38 @@ function hasHan(s: string): boolean {
 }
 
 /**
+ * Simplified forms that have no business in a zh-TW string.
+ *
+ * The prompt asks for Taiwanese conventions and the models largely comply, but
+ * both leak the occasional Simplified character mid-sentence — roughly two
+ * articles in a hundred, never enough to stop the text looking like Chinese.
+ * `hasHan` cannot see it, so until now the leak reached the database and the
+ * globe unremarked, and a reader saw 简体 in a panel that promises 繁體.
+ *
+ * Only forms with no Traditional reading are listed. Characters that exist in
+ * both scripts carrying different meanings — 后 后/後, 干 干/幹/乾, 里 里/裡,
+ * 面 面/麵, 丰 丰/豐 — are deliberately absent: catching those would throw away
+ * correct Traditional text, which costs more than the leak does.
+ */
+const SIMPLIFIED_ONLY =
+  '这说时国请对应关长门问间实现发经济产业务网络题级际认识语话读写译华报响声动' +
+  '员数术军战边过还运达进农设备计让传张润无开击论议会学医儿东车马鸟龙飞风汉' +
+  '权义亚岁万与专严们个剧场价压极见观觉讲该变单双组织结给续统纪约线维紧纳纸' +
+  '细终绝绕绍缘缩选适遗递迟连远迈违铁银钱钟锁错镇铜针钢韩顾领项顺预类频陆队' +
+  '阶险阳阴陈乐药苏荣营节兰习书买卖贵费资质赛贸财责购贫赔虽显晓归岛属层尽尔' +
+  '讯记访评证词试诉诊谈谁调谢挥换损抢护择担拟挂复'
+
+function hasSimplified(s: string): boolean {
+  return [...s].some((c) => SIMPLIFIED_ONLY.includes(c))
+}
+
+/** Traditional Chinese, or nothing. A wrong-language answer and a mixed-script
+ *  one degrade the same way: to '', so the caller falls back to the original. */
+export function isTraditionalChinese(s: string): boolean {
+  return hasHan(s) && !hasSimplified(s)
+}
+
+/**
  * The market link, or null — which is what most articles must produce.
  *
  * Fails closed at every step. Anything that is not an array, an empty list, a
@@ -202,8 +246,8 @@ export function validateClassification(raw: Record<string, unknown>): OllamaClas
   return {
     category: category as EventCategory,
     intensity: intensity as EventIntensity,
-    title_zh:   hasHan(titleZh)   ? titleZh   : '',
-    summary_zh: hasHan(summaryZh) ? summaryZh : '',
+    title_zh:   isTraditionalChinese(titleZh)   ? titleZh   : '',
+    summary_zh: isTraditionalChinese(summaryZh) ? summaryZh : '',
     summary_en: cleanText(raw.summary_en, 200),
     location: {
       type:      locType,
