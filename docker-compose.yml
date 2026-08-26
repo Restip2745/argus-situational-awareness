@@ -11,12 +11,12 @@ services:
       DB_PATH: /app/data/intelligence.db
       # Ollama — change host if Ollama runs on a different machine
       OLLAMA_HOST: http://host.docker.internal:11434
-      OLLAMA_MODEL: gemma4:e4b
+      OLLAMA_MODEL: ornith-1.5:9b
       # Optional: set LOG_LEVEL to debug for verbose output
       LOG_LEVEL: info
       # Optional overrides (uncomment and set as needed):
       # OLLAMA_TEMPERATURE: "0.1"
-      # OLLAMA_CTX: "2048"
+      # OLLAMA_CTX: "4096"
       # CONFIG_SECRET: your_config_secret
       # WEBHOOK_SECRET: your_webhook_secret
       # AISSTREAM_API_KEY: your_key

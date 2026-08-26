@@ -4,9 +4,9 @@
   },
   "llm": {
     "host": "http://localhost:11434",
-    "model": "gemma4:e4b",
+    "model": "ornith-1.5:9b",
     "temperature": 0.1,
-    "contextSize": 2048
+    "contextSize": 4096
   },
   "feeds": [
     {
