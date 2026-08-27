@@ -222,9 +222,15 @@ Strategic goals and milestone tracking for the ARGUS satellite/event tracker pro
 
 **Bounded by the watchlist, which is the scope of the whole feature.** Most countries render nothing here. Widening it to the exchange's full inventory means a matcher, and a matcher is Stage 3's problem to prove.
 
-**Stage 3 — per-event linkage (gated on 1–2 holding up)**
+**Stage 3 — per-event linkage: measured, and abandoned**
 
-- [ ] **Deterministic linkage, then measured** — candidate rule is resolution entity ∈ event actors AND time-window overlap AND volume floor, not a free-text model call: Polymarket's market space is open-ended, and `market_link` only stayed honest because its six values are a closed enum. Measure precision on a 200-article replay the way `relation` was measured, and delete the feature if it does not carry information rather than leaving it to look like a signal
+> The stage was conditional on the measurement, and the measurement said no. Both candidate rules ran over the 200 most recent classified articles in `scripts/replay-prediction-link.ts`, which is kept for the same reason `replay-market-link.ts` is: this is an obvious idea and it will be proposed again.
+
+- [x] **Rule A — country ∩ country, same category** — fired on 21.5% of articles, and 19 of those drew four markets each. That is not a link but the list of markets about that country, which the region panel already gives without pinning it to an unrelated headline. "Syria's president makes first Visa payment after sanctions removal" drew impeachment, the Panama Canal, a US–China trade agreement and the annexation of Canada
+- [x] **Rule B — resolution entity ∈ event actors, same category** — the rule this stage originally named. Fired on 5.5% and failed more quietly, which is worse: the entity is named in the story and the market resolves on something else about it. "Trump 'not in a hurry' over Iran" drew the impeachment market; "SpaceX launches Starlink satellites" drew a Mars landing; a strike in Gaza drew Israeli–Saudi normalisation. Right subject, wrong question. It is also bounded from the start — the markets that resolve on conditions rather than on anyone's actions ("Recession in 2027?") have no entity for an actor list to match
+- [x] **Decided against** — the failure is the same in both: co-occurrence is not aboutness. Judging whether a story bears on a market means reading it against that market's resolution criteria, which is a judgement over free text, which is the one thing this feature does not do. The rule was written, measured and deleted rather than shipped at a confidence it had not earned — the same ending `relation` had, for the same reason
+
+**Where this leaves the feature.** Markets appear on the two surfaces that are about a *set* of things — the world, in the prediction panel; a country, in the region panel — where a loose fit costs a reader nothing. They do not appear beside a single story, and on this evidence they should not.
 
 ---
 
