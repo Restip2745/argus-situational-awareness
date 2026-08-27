@@ -1,14 +1,17 @@
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
 import type { Article, OllamaClassification, ClientEvent, SourceReliability, MarketCommodity } from '../types'
 import { resolveLocation } from '../data/gazetteer'
 import { logger } from '../utils/logger'
+import { resolveDbPath } from '../config/paths'
 
 let db: Database.Database
 
 export function initDb(): void {
-  const dbPath = process.env.DB_PATH ?? join(process.cwd(), 'intelligence.db')
+  const dbPath = resolveDbPath()
+  // A fresh clone has no data/ until the first write lands.
+  if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true })
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
@@ -42,6 +45,11 @@ export function initDb(): void {
   if (!cols.some(c => c.name === 'summary_en')) {
     db.exec("ALTER TABLE articles ADD COLUMN summary_en TEXT")
     logger.info('[DB]', 'Migration: added summary_en column')
+  }
+  if (!cols.some(c => c.name === 'event_id')) {
+    db.exec("ALTER TABLE articles ADD COLUMN event_id TEXT")
+    db.exec("CREATE INDEX IF NOT EXISTS idx_articles_event ON articles(event_id)")
+    logger.info('[DB]', 'Migration: added event_id column')
   }
   if (!cols.some(c => c.name === 'geo_precision')) {
     db.exec("ALTER TABLE articles ADD COLUMN geo_precision TEXT")
@@ -186,6 +194,67 @@ export function getAnalyzedArticles(limit?: number): ClientEvent[] {
   return rows.map(articleToClientEvent)
 }
 
+/**
+ * Analysed articles recent enough for a new story to join, newest first.
+ *
+ * The matcher needs both the candidate events and the corpus that says which
+ * terms are rare, and one query serves as both — document frequency measured
+ * over a rolling window tracks the week's news rather than a frozen vocabulary.
+ */
+export function getRecentAnalysed(hours: number): Article[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM articles
+       WHERE is_analyzed = 1 AND event_id IS NOT NULL
+         AND datetime(published_at) > datetime('now', ?)
+       ORDER BY published_at DESC`,
+    )
+    .all(`-${hours} hours`) as Article[]
+}
+
+/**
+ * How many distinct outlets carried each event.
+ *
+ * This is the number `sources_count` was always meant to hold. Until now it was
+ * the model's answer to a question it could not see the evidence for — how many
+ * other newsrooms ran this story — asked from inside a single article, which is
+ * why it almost always said one.
+ *
+ * Rebuilt on demand rather than per row: the read paths map whole result sets
+ * through `articleToClientEvent`, and a query per article would turn one read
+ * into hundreds.
+ */
+let sourceCountsDirty = true
+let sourceCountsAt = 0
+let sourceCounts = new Map<string, number>()
+
+/** Belt as well as braces. The writes this process makes flip the flag, but
+ *  scripts/ writes to the same file — the event backfill assigns every row at
+ *  once — and nothing tells a running server that happened. A minute of
+ *  staleness on a source count is not worth a query per row to avoid. */
+const SOURCE_COUNT_TTL_MS = 60_000
+
+function eventSourceCount(eventId: string | null): number | null {
+  if (!eventId) return null
+  if (sourceCountsDirty || Date.now() - sourceCountsAt > SOURCE_COUNT_TTL_MS) {
+    const rows = getDb()
+      .prepare(
+        `SELECT event_id, COUNT(DISTINCT source) AS n FROM articles
+         WHERE is_analyzed = 1 AND event_id IS NOT NULL GROUP BY event_id`,
+      )
+      .all() as { event_id: string; n: number }[]
+    sourceCounts = new Map(rows.map((r) => [r.event_id, r.n]))
+    sourceCountsDirty = false
+    sourceCountsAt = Date.now()
+  }
+  return sourceCounts.get(eventId) ?? null
+}
+
+/** Retention deletes rows, which changes the counts. */
+export function invalidateSourceCounts(): void {
+  sourceCountsDirty = true
+}
+
 // ── Update helpers ──────────────────────────────────────
 
 export function markAnalyzed(
@@ -193,6 +262,7 @@ export function markAnalyzed(
   data: OllamaClassification,
   heatScore: number,
   expiresAt: string,
+  eventId: string | null = null,
 ): void {
   getDb().prepare(
     `UPDATE articles SET
@@ -214,7 +284,8 @@ export function markAnalyzed(
        reliability    = @reliability,
        market_link    = @market_link,
        heat_score     = @heat_score,
-       expires_at     = @expires_at
+       expires_at     = @expires_at,
+       event_id       = @event_id
      WHERE id = @id`
   ).run({
     id,
@@ -238,7 +309,11 @@ export function markAnalyzed(
     market_link:    data.market_link ? JSON.stringify(data.market_link) : null,
     heat_score:     heatScore,
     expires_at:     expiresAt,
+    // NULL until a caller supplies one. The read path falls back to the
+    // model's own sources_count for those rows, which is today's behaviour.
+    event_id:       eventId,
   })
+  sourceCountsDirty = true
 }
 
 export function markAnalysisFailed(id: string): void {
@@ -274,6 +349,8 @@ export function findAnalyzedArticles(): Article[] {
 
 export function deleteExpiredArticles(): number {
   let total = 0
+
+  sourceCountsDirty = true
 
   // Condition 1: expired + not recently referenced
   const r1 = getDb().prepare(
@@ -324,7 +401,9 @@ export function articleToClientEvent(row: Article): ClientEvent {
     body:            row.body,
     actors:          safeJsonParse(row.actors),
     tags:            safeJsonParse(row.tags),
-    sources_count:   row.sources_count ?? 1,
+    // Measured where the event is known, and only the model's guess where it
+    // is not — rows analysed before matching existed carry no event_id.
+    sources_count:   eventSourceCount(row.event_id) ?? row.sources_count ?? 1,
     reliability:     (row.reliability ?? 'UNVERIFIED') as SourceReliability,
     // Null for the great majority of rows, and an empty array is what the
     // client wants to see for those — nothing to render rather than a missing

@@ -17,7 +17,10 @@ const defaults: LlmConfig = {
   host:        process.env.OLLAMA_HOST  ?? 'http://localhost:11434',
   model:       process.env.OLLAMA_MODEL ?? 'gemma4:e4b',
   temperature: Number(process.env.OLLAMA_TEMPERATURE ?? 0.1),
-  contextSize: Number(process.env.OLLAMA_CTX         ?? 2048),
+  // 4096, not 2048: the intensity rubric in SYSTEM_PROMPT pushed the prompt past
+  // what 2048 could hold, and the overflow truncated the JSON mid-string rather
+  // than failing loudly — four articles in ninety-four silently lost.
+  contextSize: Number(process.env.OLLAMA_CTX         ?? 4096),
 }
 
 // Merge persisted values over env-var defaults on startup

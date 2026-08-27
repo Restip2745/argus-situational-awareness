@@ -16,11 +16,11 @@
  */
 
 import Database from 'better-sqlite3'
-import { join } from 'path'
 import { resolveLocation, type GeoPrecision } from '../server/src/data/gazetteer'
+import { resolveDbPath } from '../server/src/config/paths'
 
 const dryRun = process.argv.includes('--dry-run')
-const dbPath = process.env.DB_PATH ?? join(process.cwd(), '..', 'intelligence.db')
+const dbPath = resolveDbPath()
 
 const db = new Database(dbPath, { readonly: dryRun })
 

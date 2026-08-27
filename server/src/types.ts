@@ -63,6 +63,11 @@ export interface Article {
   reliability: SourceReliability | null
   market_link: string | null           // JSON array string in DB, NULL for most rows
 
+  /** The happening this article reports, shared with every other article about
+   *  it. Seeded from the first article seen, so a lone story carries its own
+   *  id. NULL on rows analysed before event matching existed. */
+  event_id: string | null
+
   image_url: string | null
 
   // Heat Score
