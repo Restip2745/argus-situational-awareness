@@ -21,6 +21,8 @@ import { getHealthSnapshot, startOllamaHealthPoll } from './services/healthTrack
 import { checkRateLimit } from './services/rateLimiter'
 import { resolveConflictSources, loadConflictFronts } from './services/conflictSources'
 import { fetchQuotes, fetchHistories, isValidRange, MAX_SYMBOLS } from './services/market'
+import { fetchMarkets, fetchHistory, isValidWindow, MAX_SLUGS } from './services/prediction'
+import { WATCHED_SLUGS, categoryOf } from './config/predictionMarkets'
 import {
   resolveEventLimit, validateExportParams, validateEventId, validateLlmConfigBody,
   validateFeedsBody, validateConfigAuth, validateAzureSpeechConfigBody, validateSpeechSynthesizeBody,
@@ -605,6 +607,88 @@ app.get('/api/market/history', async (req, res) => {
   } catch (err) {
     logger.warn('[market]', 'history fetch failed:', (err as Error).message)
     res.json([])
+  }
+})
+
+// ── Prediction Markets ────────────────────────────────────
+// What is priced to happen, for the events that have no ticker. Called with no
+// parameters this serves the curated watchlist, which is the panel's normal
+// request; `?slugs=` exists for the region and event views that will ask for a
+// subset later. Same absence contract as the quote routes — a market that has
+// resolved is simply missing from the reply.
+
+app.get('/api/prediction/markets', async (req, res) => {
+  const predIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
+    ?? req.socket.remoteAddress ?? 'unknown'
+  if (!checkRateLimit(`prediction:${predIp}`, 30, 60_000)) {
+    res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
+  }
+
+  const asked = String(req.query.slugs ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+  const slugs = (asked.length > 0 ? asked : WATCHED_SLUGS).slice(0, MAX_SLUGS)
+
+  try {
+    const markets = await fetchMarkets(slugs)
+
+    // The watchlist is maintained by hand and goes stale on its own: markets
+    // resolve, and a resolved slug drops out of the reply silently because on
+    // the panel it is indistinguishable from one that never existed. That is
+    // right for the reader and useless for whoever maintains the list, so the
+    // gap is logged here rather than shown there.
+    if (asked.length === 0 && markets.length < slugs.length) {
+      const missing = slugs.filter((s) => !markets.some((m) => m.slug === s))
+      logger.info('[prediction]', `${missing.length} watchlist slug(s) returned nothing:`, missing.join(', '))
+    }
+
+    // Category travels with the row so the panel can group these the way the
+    // rest of the interface groups events, without being handed the table too.
+    res.json(markets.map((m) => ({ ...m, category: categoryOf(m.slug) })))
+  } catch (err) {
+    logger.warn('[prediction]', 'market fetch failed:', (err as Error).message)
+    res.json([])
+  }
+})
+
+// ── Prediction History ────────────────────────────────────
+// One market's price over time, for the timeline. Takes a slug rather than the
+// CLOB token the upstream keys history on: the token is an implementation
+// detail of a second service, and resolving it here costs a cache hit on a
+// market the caller has almost certainly just fetched.
+//
+// One slug at a time, deliberately. The watchlist is sixteen rows and these
+// payloads are large; the panel charts the market a reader picked, not all of
+// them at once.
+
+app.get('/api/prediction/history', async (req, res) => {
+  const histIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
+    ?? req.socket.remoteAddress ?? 'unknown'
+  if (!checkRateLimit(`prediction-history:${histIp}`, 20, 60_000)) {
+    res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
+  }
+
+  const slug = String(req.query.slug ?? '').trim().toLowerCase()
+  const windowParam = String(req.query.window ?? '1d')
+  if (!slug || !isValidWindow(windowParam)) {
+    res.json(null)
+    return
+  }
+
+  try {
+    // A market with no token id can be priced but not charted; so can one that
+    // has resolved since the panel opened. Both end here as null, which is the
+    // same thing the caller does with either: draw no line.
+    const [market] = await fetchMarkets([slug])
+    if (!market?.yesTokenId) {
+      res.json(null)
+      return
+    }
+    res.json(await fetchHistory(slug, market.yesTokenId, windowParam))
+  } catch (err) {
+    logger.warn('[prediction]', 'history fetch failed:', (err as Error).message)
+    res.json(null)
   }
 })
 
