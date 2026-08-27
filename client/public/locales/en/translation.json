@@ -432,6 +432,7 @@
     "openMarket": "Open this market at the source",
     "volume": "Traded volume",
     "noResolveDate": "No fixed resolution date",
-    "asOf": "AS OF"
+    "asOf": "AS OF",
+    "source": "SOURCE"
   }
 }

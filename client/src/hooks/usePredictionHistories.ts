@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { PricePoint } from '../utils/prediction'
 
 export interface PriceSeries {
-  slug:   string
+  id:     string
   points: PricePoint[]
 }
 
@@ -19,7 +19,7 @@ export interface PriceSeries {
 const WINDOW = '1w'
 
 /**
- * Price series for `slugs`, fetched only while `enabled`.
+ * Price series for `ids`, fetched only while `enabled`.
  *
  * `enabled` is the whole design. Live, the panel already has every number it
  * needs from the markets endpoint, and these payloads are orders of magnitude
@@ -32,12 +32,12 @@ const WINDOW = '1w'
  * everywhere else here: a market with no price history and one whose history
  * could not be reached are the same absence to a row that cannot rewind.
  */
-export function usePredictionHistories(slugs: string[], enabled: boolean): PriceSeries[] {
+export function usePredictionHistories(ids: string[], enabled: boolean): PriceSeries[] {
   const [series, setSeries] = useState<PriceSeries[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
   // Effects cannot depend on an array identity that changes every render.
-  const key = slugs.join(',')
+  const key = ids.join(',')
 
   useEffect(() => {
     if (!enabled || !key) return
@@ -47,7 +47,7 @@ export function usePredictionHistories(slugs: string[], enabled: boolean): Price
     abortRef.current = ctrl
 
     fetch(
-      `/api/prediction/history?slugs=${encodeURIComponent(key)}&window=${WINDOW}`,
+      `/api/prediction/history?ids=${encodeURIComponent(key)}&window=${WINDOW}`,
       { signal: ctrl.signal },
     )
       .then((res) => (res.ok ? res.json() as Promise<PriceSeries[]> : []))

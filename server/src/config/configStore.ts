@@ -12,6 +12,7 @@ interface PersistedConfig {
   llm?: Record<string, unknown>
   feeds?: unknown[]
   ui?: Record<string, unknown>
+  prediction?: Record<string, unknown>
 }
 
 function ensureDir(): void {

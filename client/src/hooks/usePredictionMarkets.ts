@@ -3,7 +3,10 @@ import type { EventCategory } from '../types'
 
 /** Mirrors the server's `PredictionMarket`, plus the watchlist's category. */
 export interface PredictionMarket {
-  slug:            string
+  /** Provider-scoped identity: a ticker on Kalshi, a slug on Polymarket. */
+  id:              string
+  /** Which source this row came from, so the panel can say. */
+  provider:        string
   question:        string
   /** YES price as a fraction, 0–1. */
   price:           number
@@ -15,7 +18,8 @@ export interface PredictionMarket {
   asOf:            string
   /** The market's page upstream. */
   url:             string
-  yesTokenId:      string | null
+  /** Null when this market has no history and so cannot be rewound. */
+  historyKey:      string | null
   /** Null for a market asked for by slug rather than taken from the watchlist. */
   category:        EventCategory | null
 }
@@ -26,7 +30,8 @@ interface State {
 }
 
 /**
- * The watchlist, or the markets for `slugs` when given some.
+ * The watchlist of whichever source is configured, or the markets for `ids`
+ * when given some.
  *
  * No client-side cache, unlike `useQuotes`. That one exists because the same
  * company shows up in several panels at once and a close does not change while
@@ -41,13 +46,13 @@ interface State {
  * An empty result is the normal failure: a watchlist gone stale, or an upstream
  * that cannot be reached, both arrive as no rows. The caller renders nothing.
  */
-export function usePredictionMarkets(slugs?: string[], refreshMs?: number): State {
+export function usePredictionMarkets(ids?: string[], refreshMs?: number): State {
   const [state, setState] = useState<State>({ markets: [], loading: true })
   const [tick, setTick] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
   // Effects cannot depend on an array identity that changes every render.
-  const key = slugs?.join(',') ?? ''
+  const key = ids?.join(',') ?? ''
 
   useEffect(() => {
     if (!refreshMs) return
@@ -66,7 +71,7 @@ export function usePredictionMarkets(slugs?: string[], refreshMs?: number): Stat
     setState((s) => ({ markets: s.markets, loading: true }))
 
     const url = key
-      ? `/api/prediction/markets?slugs=${encodeURIComponent(key)}`
+      ? `/api/prediction/markets?ids=${encodeURIComponent(key)}`
       : '/api/prediction/markets'
 
     fetch(url, { signal: ctrl.signal })

@@ -57,21 +57,21 @@ export function PredictionPanel() {
 
   const { markets, loading } = usePredictionMarkets(undefined, show ? REFRESH_MS : undefined)
   const { now: sceneNow, isLive } = useSceneTime()
-  const series = usePredictionHistories(markets.map((m) => m.slug), show && !isLive)
+  const series = usePredictionHistories(markets.map((m) => m.id), show && !isLive)
 
   if (!show) return null
 
   // Live, the markets endpoint has already said everything. Scrubbed, both
   // numbers are recomputed from the series — carrying the live change over
   // beside a rewound price would be two figures that cannot both be true.
-  const byslug = new Map(series.map((s) => [s.slug, s.points]))
+  const byId = new Map(series.map((s) => [s.id, s.points]))
   const rows: Row[] = []
   for (const m of markets) {
     if (isLive) {
       rows.push({ market: m, price: m.price, changePoints: m.change24hPoints })
       continue
     }
-    const points = byslug.get(m.slug) ?? []
+    const points = byId.get(m.id) ?? []
     const price = priceAt(points, sceneNow)
     // Dropped, not blanked. At an instant before this market opened there is no
     // price to show and no row to hang one on — the same absence the quote
@@ -145,7 +145,7 @@ export function PredictionPanel() {
               </div>
               {group.map((r) => (
                 <MarketRow
-                  key={r.market.slug}
+                  key={r.market.id}
                   market={r.market}
                   price={r.price}
                   changePoints={r.changePoints}
@@ -164,6 +164,13 @@ export function PredictionPanel() {
           }}>
             {t('prediction.footnote',
                'Market price of the YES side, not a probability. Not an investment tool.')}
+            {/* Which exchange these came from. Not decoration now that there is
+                more than one source: the two measure size differently — dollars
+                matched on one, contracts settling at a dollar on the other — so
+                a volume column read without knowing the source is read wrong. */}
+            <div style={{ marginTop: '3px', letterSpacing: '0.12em' }}>
+              {t('prediction.source', 'SOURCE')}: {rows[0].market.provider.toUpperCase()}
+            </div>
           </div>
         </div>
       )}

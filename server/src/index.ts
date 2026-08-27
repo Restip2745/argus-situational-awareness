@@ -21,12 +21,11 @@ import { getHealthSnapshot, startOllamaHealthPoll } from './services/healthTrack
 import { checkRateLimit } from './services/rateLimiter'
 import { resolveConflictSources, loadConflictFronts } from './services/conflictSources'
 import { fetchQuotes, fetchHistories, isValidRange, MAX_SYMBOLS } from './services/market'
-// Aliased: `market.ts` already exports a `fetchHistories`, and the two return
-// different shapes for different upstreams.
 import {
-  fetchMarkets, fetchHistories as fetchPredictionHistories, isValidWindow, MAX_SLUGS,
+  fetchMarkets, fetchSeries, isValidWindow, isProviderName, MAX_IDS, PROVIDER_NAMES,
 } from './services/prediction'
-import { WATCHED_SLUGS, categoryOf } from './config/predictionMarkets'
+import { watchedIds, categoryOf } from './config/predictionMarkets'
+import { getPredictionConfig, setPredictionConfig } from './config/predictionConfig'
 import {
   resolveEventLimit, validateExportParams, validateEventId, validateLlmConfigBody,
   validateFeedsBody, validateConfigAuth, validateAzureSpeechConfigBody, validateSpeechSynthesizeBody,
@@ -616,10 +615,10 @@ app.get('/api/market/history', async (req, res) => {
 
 // ── Prediction Markets ────────────────────────────────────
 // What is priced to happen, for the events that have no ticker. Called with no
-// parameters this serves the curated watchlist, which is the panel's normal
-// request; `?slugs=` exists for the region and event views that will ask for a
-// subset later. Same absence contract as the quote routes — a market that has
-// resolved is simply missing from the reply.
+// parameters this serves the watchlist of whichever source is configured, which
+// is the panel's normal request; `?ids=` exists for the region and event views
+// that will ask for a subset later. Same absence contract as the quote routes —
+// a market that has resolved is simply missing from the reply.
 
 app.get('/api/prediction/markets', async (req, res) => {
   const predIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
@@ -628,28 +627,29 @@ app.get('/api/prediction/markets', async (req, res) => {
     res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
   }
 
-  const asked = String(req.query.slugs ?? '')
+  const { provider } = getPredictionConfig()
+  const asked = String(req.query.ids ?? '')
     .split(',')
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.trim())
     .filter(Boolean)
-  const slugs = (asked.length > 0 ? asked : WATCHED_SLUGS).slice(0, MAX_SLUGS)
+  const ids = (asked.length > 0 ? asked : watchedIds(provider)).slice(0, MAX_IDS)
 
   try {
-    const markets = await fetchMarkets(slugs)
+    const markets = await fetchMarkets(ids, provider)
 
     // The watchlist is maintained by hand and goes stale on its own: markets
-    // resolve, and a resolved slug drops out of the reply silently because on
-    // the panel it is indistinguishable from one that never existed. That is
-    // right for the reader and useless for whoever maintains the list, so the
-    // gap is logged here rather than shown there.
-    if (asked.length === 0 && markets.length < slugs.length) {
-      const missing = slugs.filter((s) => !markets.some((m) => m.slug === s))
-      logger.info('[prediction]', `${missing.length} watchlist slug(s) returned nothing:`, missing.join(', '))
+    // resolve, and a resolved id drops out of the reply silently because on the
+    // panel it is indistinguishable from one that never existed. That is right
+    // for the reader and useless for whoever maintains the list, so the gap is
+    // logged here rather than shown there.
+    if (asked.length === 0 && markets.length < ids.length) {
+      const missing = ids.filter((id) => !markets.some((m) => m.id === id))
+      logger.info('[prediction]', `${provider}: ${missing.length} watchlist id(s) returned nothing:`, missing.join(', '))
     }
 
     // Category travels with the row so the panel can group these the way the
     // rest of the interface groups events, without being handed the table too.
-    res.json(markets.map((m) => ({ ...m, category: categoryOf(m.slug) })))
+    res.json(markets.map((m) => ({ ...m, category: categoryOf(provider, m.id) })))
   } catch (err) {
     logger.warn('[prediction]', 'market fetch failed:', (err as Error).message)
     res.json([])
@@ -657,10 +657,10 @@ app.get('/api/prediction/markets', async (req, res) => {
 })
 
 // ── Prediction History ────────────────────────────────────
-// Prices over time, for the timeline. Takes slugs rather than the CLOB tokens
-// the upstream keys history on: the token is an implementation detail of a
-// second service, and resolving it here costs a cache hit on markets the caller
-// has almost certainly just fetched.
+// Prices over time, for the timeline. Takes ids rather than the routing keys
+// each source really uses — a CLOB token on one, a series ticker on the other —
+// because that is an implementation detail of the source, and resolving it here
+// costs a cache hit on markets the caller has almost certainly just fetched.
 //
 // Several at once, because that is how the scrub needs them. Rewinding moves
 // the whole interface to an instant, so every row has to move together — one
@@ -674,31 +674,46 @@ app.get('/api/prediction/history', async (req, res) => {
     res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
   }
 
-  const slugs = String(req.query.slugs ?? '')
+  const { provider } = getPredictionConfig()
+  const ids = String(req.query.ids ?? '')
     .split(',')
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, MAX_SLUGS)
+    .slice(0, MAX_IDS)
   const windowParam = String(req.query.window ?? '1d')
-  if (slugs.length === 0 || !isValidWindow(windowParam)) {
+  if (ids.length === 0 || !isValidWindow(windowParam)) {
     res.json([])
     return
   }
 
   try {
-    // A market with no token id can be priced but not charted; so can one that
-    // resolved since the panel opened. Both drop out here, which is the same
-    // thing the caller does with either: draw no line for that row.
-    const markets = await fetchMarkets(slugs)
-    const chartable = markets
-      .filter((m): m is typeof m & { yesTokenId: string } => m.yesTokenId !== null)
-      .map((m) => ({ slug: m.slug, tokenId: m.yesTokenId }))
-
-    res.json(await fetchPredictionHistories(chartable, windowParam))
+    // A market that cannot be charted, or that resolved since the panel opened,
+    // drops out here — which is the same thing the caller does with either:
+    // draw no line for that row.
+    const markets = await fetchMarkets(ids, provider)
+    res.json(await fetchSeries(markets.filter((m) => m.historyKey !== null), windowParam))
   } catch (err) {
     logger.warn('[prediction]', 'history fetch failed:', (err as Error).message)
     res.json([])
   }
+})
+
+// ── Prediction Provider ───────────────────────────────────
+// Which source the panel reads. A setting rather than a constant because the
+// answer is regional — see config/predictionConfig.ts.
+
+app.get('/api/config/prediction', (_req, res) => {
+  res.json({ ...getPredictionConfig(), available: PROVIDER_NAMES })
+})
+
+app.post('/api/config/prediction', (req, res) => {
+  if (!checkConfigAuth(req, res)) return
+  const body = req.body as { provider?: unknown }
+  if (!isProviderName(body.provider)) {
+    res.status(400).json({ error: `provider must be one of: ${PROVIDER_NAMES.join(', ')}` })
+    return
+  }
+  res.json(setPredictionConfig({ provider: body.provider }))
 })
 
 // ── Conflict Front Layer ──────────────────────────────────

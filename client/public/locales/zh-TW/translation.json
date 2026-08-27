@@ -432,6 +432,7 @@
     "openMarket": "到來源查看這個市場",
     "volume": "成交量",
     "noResolveDate": "沒有固定結算日",
-    "asOf": "當時"
+    "asOf": "當時",
+    "source": "資料來源"
   }
 }

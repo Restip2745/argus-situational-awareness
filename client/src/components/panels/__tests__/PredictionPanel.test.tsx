@@ -17,7 +17,7 @@ vi.mock('../../../hooks/usePredictionMarkets', () => ({
 }))
 
 const history = vi.hoisted(() => ({
-  series: [] as Array<{ slug: string; points: Array<{ t: string; price: number }> }>,
+  series: [] as Array<{ id: string; points: Array<{ t: string; price: number }> }>,
   /** What the panel last asked the history hook to do. */
   enabled: null as boolean | null,
 }))
@@ -29,7 +29,8 @@ vi.mock('../../../hooks/usePredictionHistories', () => ({
 }))
 
 const market = (over: Partial<PredictionMarket> = {}): PredictionMarket => ({
-  slug:            'ceasefire-2027',
+  id:              'ceasefire-2027',
+  provider:        'kalshi',
   question:        'Will there be a ceasefire before 2027?',
   price:           0.23,
   change24hPoints: 5,
@@ -37,7 +38,7 @@ const market = (over: Partial<PredictionMarket> = {}): PredictionMarket => ({
   resolvesAt:      '2026-12-31T12:00:00Z',
   asOf:            '2026-08-27T12:00:00Z',
   url:             'https://polymarket.com/event/ceasefire-2027',
-  yesTokenId:      'tok-yes',
+  historyKey:      'KXCEASE|KXCEASE-27',
   category:        'ARMED_CONFLICT',
   ...over,
 })
@@ -106,7 +107,7 @@ describe('PredictionPanel', () => {
   it('groups rows under the same categories the rest of the interface uses', () => {
     feed.markets = [
       market(),
-      market({ slug: 'fed-cut', question: 'Fed cut in September?', category: 'ECONOMIC' }),
+      market({ id: 'fed-cut', question: 'Fed cut in September?', category: 'ECONOMIC' }),
     ]
     render(<PredictionPanel />)
     expect(screen.getByText('CONFLICT')).toBeTruthy()
@@ -140,8 +141,8 @@ describe('PredictionPanel', () => {
 describe('PredictionPanel, rewound', () => {
   const scrubTo = (h: number) => useAppStore.setState({ sceneTime: T(h).getTime() })
 
-  const series = (slug: string, pts: Array<[number, number]>) => ({
-    slug,
+  const series = (id: string, pts: Array<[number, number]>) => ({
+    id,
     points: pts.map(([h, price]) => ({ t: T(h).toISOString(), price })),
   })
 
