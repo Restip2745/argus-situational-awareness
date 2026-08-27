@@ -36,8 +36,18 @@ export interface ResolvedLocation {
 // Approximate centroids. Country entries favour the political centre over the
 // geometric one where they differ enough to matter for a marker.
 
-const PLACES: Record<string, [number, number]> = {
-  // ── Countries: Americas ──
+/**
+ * Countries, kept apart from everything else in the table.
+ *
+ * A caller deciding whether two stories are about the same happening needs to
+ * tell a subject from a place: two things happening in Syria are two things,
+ * two things happening in Conakry are usually one. Only the split makes that
+ * distinction available — from the merged table `Conakry` and `Syria` are the
+ * same kind of entry, and treating them alike put a war-crimes verdict in with
+ * a terrorism delisting.
+ */
+const COUNTRIES: Record<string, [number, number]> = {
+  // ── Americas ──
   'United States of America': [38.9, -77.0],
   'Canada':             [56.1, -106.3],
   'Mexico':             [23.6, -102.6],
@@ -215,6 +225,11 @@ const PLACES: Record<string, [number, number]> = {
   'Lesotho':            [-29.6,  28.2],
   'Cape Verde':         [16.0,  -24.0],
 
+}
+
+/** Everything else the table can resolve: waterways, sub-national regions, US
+ *  states, cities, and the Chinese-language labels for all of the above. */
+const OTHER_PLACES: Record<string, [number, number]> = {
   // ── Polar ──
   'Antarctica':         [-82.0,   0.0],
   'Greenland':          [71.7,  -42.6],
@@ -582,6 +597,9 @@ const PLACES: Record<string, [number, number]> = {
   '西藏':   [31.5,   88.9],
 }
 
+/** The whole table, as every existing caller expects it. */
+const PLACES: Record<string, [number, number]> = { ...COUNTRIES, ...OTHER_PLACES }
+
 // ── Aliases ─────────────────────────────────────────────
 // Alternate spellings, abbreviations and endonyms that must land on a
 // canonical key. Written lower-case; lookup normalises the label first.
@@ -896,4 +914,4 @@ export function resolveLocation(
 }
 
 /** Exposed for tests and tooling. */
-export const _internals = { PLACES, ALIASES, REGIONS, normalise, containmentMatch, isRegion }
+export const _internals = { PLACES, COUNTRIES, ALIASES, REGIONS, normalise, containmentMatch, isRegion }
