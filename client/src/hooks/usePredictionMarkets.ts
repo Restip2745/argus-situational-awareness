@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useAppStore } from '../store'
 import type { EventCategory } from '../types'
 
 /** Mirrors the server's `PredictionMarket`, plus the watchlist's category. */
@@ -50,6 +51,9 @@ export function usePredictionMarkets(ids?: string[], refreshMs?: number): State 
   const [state, setState] = useState<State>({ markets: [], loading: true })
   const [tick, setTick] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
+  // Re-reads when the configured source changes, rather than waiting out the
+  // refresh interval and showing the previous source's rows in the meantime.
+  const epoch = useAppStore((s) => s.predictionEpoch)
 
   // Effects cannot depend on an array identity that changes every render.
   const key = ids?.join(',') ?? ''
@@ -89,7 +93,7 @@ export function usePredictionMarkets(ids?: string[], refreshMs?: number): State 
       })
 
     return () => ctrl.abort()
-  }, [key, tick])
+  }, [key, tick, epoch])
 
   return state
 }

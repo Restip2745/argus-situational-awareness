@@ -134,6 +134,7 @@ export function ConfigModal() {
   const soundVolume     = useAppStore((s) => s.soundVolume)
   const setSoundVolume  = useAppStore((s) => s.setSoundVolume)
   const setUiScale    = useAppStore((s) => s.setUiScale)
+  const bumpPredictionEpoch = useAppStore((s) => s.bumpPredictionEpoch)
   const cardRef = useRef<HTMLDivElement>(null)
   useFocusTrap(cardRef, true)
 
@@ -154,6 +155,12 @@ export function ConfigModal() {
   const [newFeedUrl,  setNewFeedUrl]  = useState('')
   const [localScale,  setLocalScale]  = useState(uiScale)
 
+  // Which exchange the prediction panel reads. A server setting rather than a
+  // store one: the watchlist, the id space and the volume floor all belong to
+  // whichever source is chosen, so the choice has to be made where they are.
+  const [predictionProvider, setPredictionProvider] = useState<string | null>(null)
+  const [providersAvailable, setProvidersAvailable] = useState<string[]>([])
+
   const [azureSpeech,   setAzureSpeech]   = useState<AzureSpeechConfig | null>(null)
   // A fresh key the user just typed; empty means "leave whatever is saved
   // alone" — the server never echoes the key back, so there is nothing to
@@ -165,6 +172,7 @@ export function ConfigModal() {
   const savedFeeds       = useRef<FeedConfigItem[]>([])
   const savedScale       = useRef(uiScale)
   const savedAzureSpeech = useRef<AzureSpeechConfig | null>(null)
+  const savedPredictionProvider = useRef<string | null>(null)
 
   // ── Drag ──────────────────────────────────────────────────
   function handleHeaderMouseDown(e: React.MouseEvent) {
@@ -189,12 +197,13 @@ export function ConfigModal() {
     setStatus('loading')
     setErrMsg('')
     try {
-      const [cfgRes, modRes, feedsRes, healthRes, azureRes] = await Promise.all([
+      const [cfgRes, modRes, feedsRes, healthRes, azureRes, predRes] = await Promise.all([
         fetch(`${API}/api/config/llm`),
         fetch(`${API}/api/ollama/models`),
         fetch(`${API}/api/config/feeds`),
         fetch(`${API}/api/health`),
         fetch(`${API}/api/config/azure-speech`),
+        fetch(`${API}/api/config/prediction`),
       ])
       if (!cfgRes.ok) throw new Error(`Config fetch failed: ${cfgRes.status}`)
       const cfg: LlmConfig = await cfgRes.json()
@@ -213,6 +222,15 @@ export function ConfigModal() {
       setLocalScale(uiScale); savedScale.current = uiScale
       setAzureSpeech(azure); savedAzureSpeech.current = azure
       setAzureKeyInput('')
+      // The list of sources comes from the server rather than being restated
+      // here: a build that knows about a provider this server does not have
+      // would offer a choice that cannot be saved.
+      if (predRes.ok) {
+        const pred = await predRes.json() as { provider: string; available: string[] }
+        setPredictionProvider(pred.provider)
+        savedPredictionProvider.current = pred.provider
+        setProvidersAvailable(pred.available ?? [])
+      }
       setModels(modRes.ok ? await modRes.json() : [])
       setDirty(false)
       setStatus('idle')
@@ -250,6 +268,18 @@ export function ConfigModal() {
           }),
         }),
       ])
+      // Sent only when it changed. The other saves here are idempotent
+      // rewrites of what is already on screen; this one clears a cache of live
+      // prices on the server, and doing that because someone opened settings to
+      // adjust the volume would be a cost with nothing behind it.
+      if (predictionProvider !== null && predictionProvider !== savedPredictionProvider.current) {
+        await fetch(`${API}/api/config/prediction`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: predictionProvider }),
+        })
+        savedPredictionProvider.current = predictionProvider
+        bumpPredictionEpoch()
+      }
       if (!llmRes.ok) throw new Error(`Save failed: ${llmRes.status}`)
       const saved: LlmConfig = await llmRes.json()
       const savedFds: FeedConfigItem[] = feedsRes.ok ? await feedsRes.json() : feeds
@@ -281,6 +311,7 @@ export function ConfigModal() {
     setLocalScale(savedScale.current)
     setUiScale(savedScale.current)
     setAzureSpeech(savedAzureSpeech.current)
+    setPredictionProvider(savedPredictionProvider.current)
     setAzureKeyInput('')
     setDirty(false)
     setShowConfig(false)
@@ -551,6 +582,47 @@ export function ConfigModal() {
                   </button>
                 </div>
               </div>
+
+              {/* Prediction source */}
+              {predictionProvider !== null && providersAvailable.length > 1 && (
+                <div>
+                  <SectionTitle label={t('config.sections.prediction', 'PREDICTION SOURCE')} />
+                  <div className="text-[#2a4060] text-[11px] mb-2 leading-relaxed">
+                    {/* The reason this is a setting at all, stated where the
+                        choice is made. Without it the two options look like a
+                        matter of taste, and a reader whose panel is empty has
+                        no way to guess that the fix is here. */}
+                    {t('config.prediction.description',
+                       'Which exchange the prediction panel reads. Polymarket is blocked by some networks and carries more live geopolitics; Kalshi resolves more widely and is deeper on politics and the economy. Each has its own watchlist.')}
+                  </div>
+                  <div className="flex rounded overflow-hidden" style={{ border: '1px solid rgba(0,180,255,0.15)' }}>
+                    {providersAvailable.map((name, i) => (
+                      <button
+                        key={name}
+                        onClick={() => { setPredictionProvider(name); setDirty(true) }}
+                        disabled={isLoading}
+                        className="flex-1 text-[11px] tracking-[0.08em] py-1"
+                        style={{
+                          color: predictionProvider === name ? '#ffb347' : '#2a5070',
+                          background: predictionProvider === name ? 'rgba(255,179,71,0.12)' : 'transparent',
+                          borderLeft: i > 0 ? '1px solid rgba(0,180,255,0.12)' : 'none',
+                          cursor: 'pointer',
+                        }}
+                      >{name.toUpperCase()}</button>
+                    ))}
+                  </div>
+                  {predictionProvider !== savedPredictionProvider.current && (
+                    <span className="text-[#2a4060] text-[11px] mt-1 block">
+                      {/* Switching swaps the watchlist as well as the source, so
+                          the panel comes back with different questions rather
+                          than the same ones repriced. Worth saying before the
+                          reader wonders where their rows went. */}
+                      {t('config.prediction.switchNote',
+                         'The panel will show this source’s own watchlist.')}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Webhook */}
               {serviceHealth.webhookEnabled && (

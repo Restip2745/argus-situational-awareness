@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useAppStore } from '../store'
 import type { PricePoint } from '../utils/prediction'
 
 export interface PriceSeries {
@@ -35,6 +36,9 @@ const WINDOW = '1w'
 export function usePredictionHistories(ids: string[], enabled: boolean): PriceSeries[] {
   const [series, setSeries] = useState<PriceSeries[]>([])
   const abortRef = useRef<AbortController | null>(null)
+  // Series belong to a source as much as prices do; a switch invalidates these
+  // as completely as it does the rows above them.
+  const epoch = useAppStore((s) => s.predictionEpoch)
 
   // Effects cannot depend on an array identity that changes every render.
   const key = ids.join(',')
@@ -65,7 +69,7 @@ export function usePredictionHistories(ids: string[], enabled: boolean): PriceSe
     return () => ctrl.abort()
     // Deliberately not re-fetching when `enabled` goes false: the series stay
     // in state so returning to live and scrubbing again is free.
-  }, [key, enabled])
+  }, [key, enabled, epoch])
 
   return series
 }

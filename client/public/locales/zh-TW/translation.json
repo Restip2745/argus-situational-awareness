@@ -266,7 +266,8 @@
       "display": "顯示",
       "feeds": "RSS 訂閱",
       "azureSpeech": "Azure 語音",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "prediction": "預測市場來源"
     },
     "azureVoice": {
       "zh-TW-HsiaoChenNeural": "繁體中文 — HsiaoChen（女聲）",
@@ -312,6 +313,10 @@
       "cancel": "取消",
       "apply": "套用",
       "close": "關閉"
+    },
+    "prediction": {
+      "description": "預測面板要讀哪一個交易所。Polymarket 在部分網路被封鎖，但即時地緣題目較多；Kalshi 大多數地區都連得到，在政治與經濟上較深。兩者各有自己的觀察清單。",
+      "switchNote": "面板會改為顯示這個來源自己的觀察清單。"
     }
   },
   "note": {

@@ -266,7 +266,8 @@
       "display": "Display",
       "feeds": "RSS Feeds",
       "azureSpeech": "Azure Speech",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "prediction": "PREDICTION SOURCE"
     },
     "azureVoice": {
       "zh-TW-HsiaoChenNeural": "Traditional Chinese — HsiaoChen (F)",
@@ -312,6 +313,10 @@
       "cancel": "CANCEL",
       "apply": "APPLY",
       "close": "Close"
+    },
+    "prediction": {
+      "description": "Which exchange the prediction panel reads. Polymarket is blocked by some networks and carries more live geopolitics; Kalshi resolves more widely and is deeper on politics and the economy. Each has its own watchlist.",
+      "switchNote": "The panel will show this source’s own watchlist."
     }
   },
   "note": {
