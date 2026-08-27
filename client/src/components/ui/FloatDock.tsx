@@ -223,6 +223,8 @@ export function FloatDock() {
   const contextEntities      = useAppStore((s) => s.contextEntities)
   const showContextPanel     = useAppStore((s) => s.showContextPanel)
   const setShowContextPanel  = useAppStore((s) => s.setShowContextPanel)
+  const showPredictionPanel    = useAppStore((s) => s.showPredictionPanel)
+  const setShowPredictionPanel = useAppStore((s) => s.setShowPredictionPanel)
 
 
   const serviceHealth      = useServiceHealth()
@@ -641,6 +643,18 @@ export function FloatDock() {
         onClick={() => setShowContextPanel(!showContextPanel)}
       />
 
+
+      {/* Prediction markets — the only way in, since these rows hang off no
+          event and no country. % reads as the thing the panel is: a price
+          quoted as a percentage. Deliberately not ◈, which marks a panel
+          section throughout the app rather than a way to open one. */}
+      <DockBtn
+        icon="%"
+        label={t('prediction.toggle', 'PREDICTION MARKETS')}
+        color="#ffb347"
+        active={showPredictionPanel}
+        onClick={() => setShowPredictionPanel(!showPredictionPanel)}
+      />
 
       {/* Intel brief */}
       {intelBrief && (

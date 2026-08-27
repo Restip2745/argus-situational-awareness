@@ -363,6 +363,10 @@ interface AppState {
   removeContextEntity: (id: string) => void
   clearContextEntities: () => void
 
+  // ── Prediction markets panel ───────────────────────────────
+  showPredictionPanel: boolean
+  setShowPredictionPanel: (v: boolean) => void
+
   // ── Panel z-order (click to bring to front) ───────────────
   panelZ: Record<string, number>
   bringToFront: (key: string) => void
@@ -716,6 +720,17 @@ export const useAppStore = create<AppState>((set) => ({
   contextEntities: loadContextEntities(),
   showContextPanel: false,
   setShowContextPanel: (showContextPanel) => set({ showContextPanel }),
+
+  // Prediction panel — not persisted, unlike the collection above. It holds no
+  // state a reader assembled: closing it discards nothing, and reopening it
+  // reads the same live prices over again.
+  showPredictionPanel: false,
+  setShowPredictionPanel: (showPredictionPanel) => set((s) => ({
+    showPredictionPanel,
+    panelZ: showPredictionPanel
+      ? { ...s.panelZ, prediction: Math.max(...Object.values(s.panelZ), 29) + 1 }
+      : s.panelZ,
+  })),
   addContextEntity: (entity) => set((s) => {
     if (s.contextEntities.some(e => e.id === entity.id)) return s
     if (s.contextEntities.length >= CONTEXT_ENTITY_LIMIT) return s

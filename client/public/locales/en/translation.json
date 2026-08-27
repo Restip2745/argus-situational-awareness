@@ -422,5 +422,15 @@
       "title": "MARKET",
       "hint": "Last close at each exchange, with the time it was priced."
     }
+  },
+  "prediction": {
+    "title": "PREDICTION MARKETS",
+    "toggle": "PREDICTION MARKETS",
+    "loading": "READING MARKETS…",
+    "empty": "NO MARKETS AVAILABLE",
+    "footnote": "Market price of the YES side, not a probability. Not an investment tool.",
+    "openMarket": "Open this market at the source",
+    "volume": "Traded volume",
+    "noResolveDate": "No fixed resolution date"
   }
 }

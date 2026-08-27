@@ -422,5 +422,15 @@
       "title": "行情",
       "hint": "各交易所最新收盤價，並標註定價時間。"
     }
+  },
+  "prediction": {
+    "title": "預測市場",
+    "toggle": "預測市場",
+    "loading": "讀取市場中…",
+    "empty": "目前沒有市場",
+    "footnote": "為 YES 一方的市場定價，不是機率。本工具不構成投資建議。",
+    "openMarket": "到來源查看這個市場",
+    "volume": "成交量",
+    "noResolveDate": "沒有固定結算日"
   }
 }
