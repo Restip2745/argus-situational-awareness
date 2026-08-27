@@ -109,7 +109,8 @@
       "economic": "經濟風險評估",
       "political": "政治穩定性分析"
     },
-    "indices": "股市指數"
+    "indices": "股市指數",
+    "predictionMarkets": "預測市場"
   },
   "canvas": {
     "toggle": "標記畫布",
@@ -266,7 +267,8 @@
       "display": "顯示",
       "feeds": "RSS 訂閱",
       "azureSpeech": "Azure 語音",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "prediction": "預測市場來源"
     },
     "azureVoice": {
       "zh-TW-HsiaoChenNeural": "繁體中文 — HsiaoChen（女聲）",
@@ -312,6 +314,10 @@
       "cancel": "取消",
       "apply": "套用",
       "close": "關閉"
+    },
+    "prediction": {
+      "description": "預測面板要讀哪一個交易所。Polymarket 在部分網路被封鎖，但即時地緣題目較多；Kalshi 大多數地區都連得到，在政治與經濟上較深。兩者各有自己的觀察清單。",
+      "switchNote": "面板會改為顯示這個來源自己的觀察清單。"
     }
   },
   "note": {
@@ -422,5 +428,17 @@
       "title": "行情",
       "hint": "各交易所最新收盤價，並標註定價時間。"
     }
+  },
+  "prediction": {
+    "title": "預測市場",
+    "toggle": "預測市場",
+    "loading": "讀取市場中…",
+    "empty": "目前沒有市場",
+    "footnote": "為 YES 一方的市場定價，不是機率。本工具不構成投資建議。",
+    "openMarket": "到來源查看這個市場",
+    "volume": "成交量",
+    "noResolveDate": "沒有固定結算日",
+    "asOf": "當時",
+    "source": "資料來源"
   }
 }

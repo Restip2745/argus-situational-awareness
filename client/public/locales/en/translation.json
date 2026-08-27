@@ -109,7 +109,8 @@
       "economic": "Economic risk assessment",
       "political": "Political stability analysis"
     },
-    "indices": "MARKET INDICES"
+    "indices": "MARKET INDICES",
+    "predictionMarkets": "PREDICTION MARKETS"
   },
   "canvas": {
     "toggle": "ANNOTATION CANVAS",
@@ -266,7 +267,8 @@
       "display": "Display",
       "feeds": "RSS Feeds",
       "azureSpeech": "Azure Speech",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "prediction": "PREDICTION SOURCE"
     },
     "azureVoice": {
       "zh-TW-HsiaoChenNeural": "Traditional Chinese — HsiaoChen (F)",
@@ -312,6 +314,10 @@
       "cancel": "CANCEL",
       "apply": "APPLY",
       "close": "Close"
+    },
+    "prediction": {
+      "description": "Which exchange the prediction panel reads. Polymarket is blocked by some networks and carries more live geopolitics; Kalshi resolves more widely and is deeper on politics and the economy. Each has its own watchlist.",
+      "switchNote": "The panel will show this source’s own watchlist."
     }
   },
   "note": {
@@ -422,5 +428,17 @@
       "title": "MARKET",
       "hint": "Last close at each exchange, with the time it was priced."
     }
+  },
+  "prediction": {
+    "title": "PREDICTION MARKETS",
+    "toggle": "PREDICTION MARKETS",
+    "loading": "READING MARKETS…",
+    "empty": "NO MARKETS AVAILABLE",
+    "footnote": "Market price of the YES side, not a probability. Not an investment tool.",
+    "openMarket": "Open this market at the source",
+    "volume": "Traded volume",
+    "noResolveDate": "No fixed resolution date",
+    "asOf": "AS OF",
+    "source": "SOURCE"
   }
 }

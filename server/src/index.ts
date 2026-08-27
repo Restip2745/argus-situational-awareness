@@ -22,6 +22,11 @@ import { checkRateLimit } from './services/rateLimiter'
 import { resolveConflictSources, loadConflictFronts } from './services/conflictSources'
 import { fetchQuotes, fetchHistories, isValidRange, MAX_SYMBOLS } from './services/market'
 import {
+  fetchMarkets, fetchSeries, isValidWindow, isProviderName, MAX_IDS, PROVIDER_NAMES,
+} from './services/prediction'
+import { watchedIds, categoryOf, countriesOf } from './config/predictionMarkets'
+import { getPredictionConfig, setPredictionConfig } from './config/predictionConfig'
+import {
   resolveEventLimit, validateExportParams, validateEventId, validateLlmConfigBody,
   validateFeedsBody, validateConfigAuth, validateAzureSpeechConfigBody, validateSpeechSynthesizeBody,
 } from './utils/validation'
@@ -606,6 +611,113 @@ app.get('/api/market/history', async (req, res) => {
     logger.warn('[market]', 'history fetch failed:', (err as Error).message)
     res.json([])
   }
+})
+
+// ── Prediction Markets ────────────────────────────────────
+// What is priced to happen, for the events that have no ticker. Called with no
+// parameters this serves the watchlist of whichever source is configured, which
+// is the panel's normal request; `?ids=` exists for the region and event views
+// that will ask for a subset later. Same absence contract as the quote routes —
+// a market that has resolved is simply missing from the reply.
+
+app.get('/api/prediction/markets', async (req, res) => {
+  const predIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
+    ?? req.socket.remoteAddress ?? 'unknown'
+  if (!checkRateLimit(`prediction:${predIp}`, 30, 60_000)) {
+    res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
+  }
+
+  const { provider } = getPredictionConfig()
+  const asked = String(req.query.ids ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const ids = (asked.length > 0 ? asked : watchedIds(provider)).slice(0, MAX_IDS)
+
+  try {
+    const markets = await fetchMarkets(ids, provider)
+
+    // The watchlist is maintained by hand and goes stale on its own: markets
+    // resolve, and a resolved id drops out of the reply silently because on the
+    // panel it is indistinguishable from one that never existed. That is right
+    // for the reader and useless for whoever maintains the list, so the gap is
+    // logged here rather than shown there.
+    if (asked.length === 0 && markets.length < ids.length) {
+      const missing = ids.filter((id) => !markets.some((m) => m.id === id))
+      logger.info('[prediction]', `${provider}: ${missing.length} watchlist id(s) returned nothing:`, missing.join(', '))
+    }
+
+    // Category and countries travel with the row so the two panels can group
+    // and filter these without being handed the watchlist table as well.
+    res.json(markets.map((m) => ({
+      ...m,
+      category:  categoryOf(provider, m.id),
+      countries: countriesOf(provider, m.id),
+    })))
+  } catch (err) {
+    logger.warn('[prediction]', 'market fetch failed:', (err as Error).message)
+    res.json([])
+  }
+})
+
+// ── Prediction History ────────────────────────────────────
+// Prices over time, for the timeline. Takes ids rather than the routing keys
+// each source really uses — a CLOB token on one, a series ticker on the other —
+// because that is an implementation detail of the source, and resolving it here
+// costs a cache hit on markets the caller has almost certainly just fetched.
+//
+// Several at once, because that is how the scrub needs them. Rewinding moves
+// the whole interface to an instant, so every row has to move together — one
+// row priced an hour ago beside eight priced now is the contradiction scene
+// time exists to prevent.
+
+app.get('/api/prediction/history', async (req, res) => {
+  const histIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
+    ?? req.socket.remoteAddress ?? 'unknown'
+  if (!checkRateLimit(`prediction-history:${histIp}`, 20, 60_000)) {
+    res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
+  }
+
+  const { provider } = getPredictionConfig()
+  const ids = String(req.query.ids ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, MAX_IDS)
+  const windowParam = String(req.query.window ?? '1d')
+  if (ids.length === 0 || !isValidWindow(windowParam)) {
+    res.json([])
+    return
+  }
+
+  try {
+    // A market that cannot be charted, or that resolved since the panel opened,
+    // drops out here — which is the same thing the caller does with either:
+    // draw no line for that row.
+    const markets = await fetchMarkets(ids, provider)
+    res.json(await fetchSeries(markets.filter((m) => m.historyKey !== null), windowParam))
+  } catch (err) {
+    logger.warn('[prediction]', 'history fetch failed:', (err as Error).message)
+    res.json([])
+  }
+})
+
+// ── Prediction Provider ───────────────────────────────────
+// Which source the panel reads. A setting rather than a constant because the
+// answer is regional — see config/predictionConfig.ts.
+
+app.get('/api/config/prediction', (_req, res) => {
+  res.json({ ...getPredictionConfig(), available: PROVIDER_NAMES })
+})
+
+app.post('/api/config/prediction', (req, res) => {
+  if (!checkConfigAuth(req, res)) return
+  const body = req.body as { provider?: unknown }
+  if (!isProviderName(body.provider)) {
+    res.status(400).json({ error: `provider must be one of: ${PROVIDER_NAMES.join(', ')}` })
+    return
+  }
+  res.json(setPredictionConfig({ provider: body.provider }))
 })
 
 // ── Conflict Front Layer ──────────────────────────────────

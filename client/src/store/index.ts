@@ -363,6 +363,13 @@ interface AppState {
   removeContextEntity: (id: string) => void
   clearContextEntities: () => void
 
+  // ── Prediction markets panel ───────────────────────────────
+  showPredictionPanel: boolean
+  setShowPredictionPanel: (v: boolean) => void
+  /** Bumped when the source changes, to make the panel re-read at once. */
+  predictionEpoch: number
+  bumpPredictionEpoch: () => void
+
   // ── Panel z-order (click to bring to front) ───────────────
   panelZ: Record<string, number>
   bringToFront: (key: string) => void
@@ -716,6 +723,25 @@ export const useAppStore = create<AppState>((set) => ({
   contextEntities: loadContextEntities(),
   showContextPanel: false,
   setShowContextPanel: (showContextPanel) => set({ showContextPanel }),
+
+  // Prediction panel — not persisted, unlike the collection above. It holds no
+  // state a reader assembled: closing it discards nothing, and reopening it
+  // reads the same live prices over again.
+  // The panel re-reads on a one-minute timer, which is right for prices that
+  // drift and wrong for a source that was just changed: settings would appear
+  // to do nothing for up to a minute after an explicit action. This is the
+  // nudge, and deliberately a counter rather than a callback — the panel need
+  // not exist for the setting to be changed.
+  predictionEpoch: 0,
+  bumpPredictionEpoch: () => set((s) => ({ predictionEpoch: s.predictionEpoch + 1 })),
+
+  showPredictionPanel: false,
+  setShowPredictionPanel: (showPredictionPanel) => set((s) => ({
+    showPredictionPanel,
+    panelZ: showPredictionPanel
+      ? { ...s.panelZ, prediction: Math.max(...Object.values(s.panelZ), 29) + 1 }
+      : s.panelZ,
+  })),
   addContextEntity: (entity) => set((s) => {
     if (s.contextEntities.some(e => e.id === entity.id)) return s
     if (s.contextEntities.length >= CONTEXT_ENTITY_LIMIT) return s

@@ -5,6 +5,7 @@ import { SolarSystem } from './components/scene/SolarSystem'
 import { Nebula } from './components/scene/Nebula'
 import { EventPanel } from './components/panels/EventPanel'
 import { RegionPanel } from './components/panels/RegionPanel'
+import { PredictionPanel } from './components/panels/PredictionPanel'
 import { Sidebar } from './components/ui/Sidebar'
 import { StatusBar, STATUS_BAR_H } from './components/ui/StatusBar'
 import { LanguageSwitcher } from './components/ui/LanguageSwitcher'
@@ -195,6 +196,7 @@ export default function App() {
         <ErrorBoundary label="Celestial Panel"><CelestialBodyPanel /></ErrorBoundary>
         <ErrorBoundary label="Person Panel"><WikiPanel /></ErrorBoundary>
         <ErrorBoundary label="Context Panel"><MultiEntityContextPanel /></ErrorBoundary>
+        <ErrorBoundary label="Prediction Panel"><PredictionPanel /></ErrorBoundary>
 
         {showConfig && <ConfigModal />}
         {showCanvasAnalysis && <CanvasAnalysisPanel onClose={() => setShowCanvasAnalysis(false)} />}

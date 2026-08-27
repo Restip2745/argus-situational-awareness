@@ -183,6 +183,57 @@ Strategic goals and milestone tracking for the ARGUS satellite/event tracker pro
 
 ---
 
+## Phase Q — Prediction Markets
+
+> Forward-looking market data for the events that have no listed instrument — elections, ceasefires, rate decisions, launch windows. Staged so that a mis-linked market is impossible before it is merely unlikely.
+
+**Stage 1 — global watchlist (no matching, no linkage)**
+
+- [x] **Prediction service** — `server/src/services/prediction.ts`, shaped after `market.ts`: `parseMarket` split from the fetch so shape judgement is testable without the network; every unexpected upstream response fails to "not shown" rather than to a placeholder number; `MAX_SLUGS` cap per call so one panel cannot fan out. Cache TTL 60s — the 10-minute close-feed TTL does not carry over, its justification was that the market is shut most of the time and this one trades 24/7. Confirm Gamma/CLOB paths against the live API before implementing
+- [x] **Prediction endpoints** — `GET /api/prediction/markets` (no params serves the watchlist, `?slugs=` for the subset views to come) and `GET /api/prediction/history?slug=…&window=…`, both rate limited. No validators in `validation.ts` after all: those return 400, and the sibling quote routes answer a request they cannot serve with an empty reply instead — absence is the contract this panel is built on, and one route breaking it would be worse than the asymmetry. History takes a slug and resolves the CLOB token itself, off the market cache
+- [x] **Curated slug list** — `server/src/config/predictionMarkets.ts`, hand-maintained in the same spirit as `feeds.ts`. Stage 1 ships this and nothing else: no model, no text similarity, no auto-matching. No matching means no mis-matching, and it also keeps distasteful markets (casualty counts, death pools) off screen by construction
+- [x] **Volume floor** — `MIN_VOLUME_USD` enforced in the parse layer, not the view. A market with $400 of volume prices identically to a liquid one; this is the dormant-GDR failure again — a wrong number that renders perfectly — so the row is dropped rather than annotated
+- [x] **Watchlist panel** — question text rendered verbatim (never paraphrased: resolution criteria are the whole difference between near-duplicate markets), priced percentage, 24h change, resolution date, volume. Every row carries its resolution date for the same reason every quote row carries its as-of date
+- [x] **Wording: "market price", not "probability"** — fees, cost of capital and longshot bias mean the two are not the same claim; i18n keys in both locales. Sits alongside the event panel's existing refusal to assert causation
+- [x] **Outbound market links** — each row links out to its Polymarket event page (`target="_blank" rel="noopener noreferrer"`, external-link affordance), so a reader can check resolution criteria and depth at the source. The boundary: link out, nothing more — no wallet, no in-app order flow, no trade affordance. Restate "not an investment tool" in this context
+- [x] **Timeline integration** — `prices-history` backs the 24h scrub so prices rewind with the rest of the UI; unlike stock closes these have real intraday shape, so the rows stay visible in retrospect rather than hiding with the live-only layers. The daily move is recomputed for the scrubbed instant rather than carried over — a rewound price beside a live change is two numbers that cannot both be true. Series are fetched only once a reader actually scrubs, and the history route took `slugs` plural in the end: the scrub moves every row at once
+- [x] **README + disclosure** — new row in 資料來源與授權 (Polymarket Gamma/CLOB, public read-only, no key); extend the privacy note — querying a market tells the upstream which event you are reading, same standing as Wikipedia and Yahoo
+- [x] **Tests** — 69 in all: 30 on `parseMarket`/`parsePriceHistory` (shape guards, settled and expired markets, multi-outcome, degenerate prices, volume floor, YES-by-label), 22 on the display and rewind rules, 17 on the panel (verbatim question, points-not-percent, single outbound link, absence on failure, rewound prices). The routes have no test harness in this project and were exercised against a running server instead
+
+**Stage 1b — two sources, chosen at runtime**
+
+> Not planned. Polymarket turned out to be DNS-blocked in Taiwan and in other jurisdictions that treat it as gambling, so the panel Stage 1 built showed nothing there — and the block is at the ISP, not something a reader can switch off.
+
+- [x] **Provider boundary** — `services/prediction.ts` became `services/prediction/{types,kalshi,polymarket,index}.ts`: providers fetch and parse, `index.ts` owns the cache, the concurrency limit and which source is in use. `PredictionMarket.slug` became `id` (a slug on one source, a ticker on the other, and neither name would be true of both) and `yesTokenId` became an opaque `historyKey`. What the two do not share is documented rather than flattened — most importantly `volumeUsd`, which is dollars matched on one source and contracts settling at a dollar each on the other, so the volume floor is per provider
+- [x] **Kalshi provider, default** — every field checked against live responses, not documentation. A question is an *event* rather than a market there, which is what makes the multi-outcome guard possible: eight rival markets under one NATO question are each individually binary and would each have passed a per-market check. `mutually_exclusive` plus a market count catches them. The daily move is derived from candlesticks rather than read off `previous_price_dollars`, which states no period
+- [x] **Verified watchlist** — 11 Kalshi events read off live responses: single-market, not mutually exclusive, trading, past the volume floor. The shape of the list is itself a finding — the exchange is deep on American politics and macro and had no Ukraine, Taiwan or Iran market among the single-outcome events, so `ARMED_CONFLICT` is represented by diplomatic normalisation. That gap is why the Polymarket provider is kept rather than deleted; its slugs remain UNVERIFIED
+- [x] **Source setting** — `config/predictionConfig.ts` (persisted, `PREDICTION_PROVIDER` env default, invalid values rejected rather than reaching a lookup as undefined); `GET/POST /api/config/prediction`; a two-option control in ConfigModal beside the feeds, carrying the reason for choosing between them. Applying bumps a counter the panel watches, so switching does not appear to do nothing until the next one-minute refresh
+- [x] **Two faults found by running it** — the daily move was empty on every row, measured from a window exactly as wide as the request that fed it; and half the history requests were being throttled under a sixteen-way fan-out, with the misses cached, stranding rows un-rewindable for five minutes over a hiccup. Neither was visible in the tests, because both parsers were given data
+- [x] **README** — two-source table, per-source watchlists, the volume-unit difference, and a troubleshooting note: a blocked domain presents as a certificate error rather than a timeout, which reads as a broken upstream or a broken build
+
+**Stage 2 — region panel**
+
+> Planned as tag matching and delivered as a stated mapping, because the tags do not exist. Of Kalshi's 220 series tags exactly four are countries — Iran, Brazil, Hungary, Peru — incidentally rather than as a taxonomy. Matching country names against the question text was the alternative and reintroduces the failure this feature is shaped around, only smaller: Turkey, Chad, Jordan and Georgia are each a country and each something else.
+
+- [x] **Region markets row** — `RegionMarkets.tsx` beside `RegionIndices`, on the same reasoning: it is a reading of a place rather than of something the reader clicked. Filters the watchlist the prediction panel has already fetched, so it costs no extra request
+- [x] **Countries stated, not derived** — `WatchedMarket.countries`, written down beside each market and travelling with the row. Absent where a market is about no country: a Mars landing is not a reading of the United States, and filing it under the launching country would be the category error the index table records about sector indices
+- [x] **No excluded-topic filter needed** — it was on this list because rows were to stop being hand-picked here. They do not: the mapping is as hand-maintained as the watchlist, so distasteful subjects stay out by construction rather than by filter
+- [x] **Verified in the running app** — the United States panel draws its 7 markets and only those: no Israel row, no space row, 7 of the 11 the endpoint holds. Sits directly under the stock indices, which is where the design put it. Reaching it needed the WebGL globe, so this waited for a browser that renders one
+
+**Bounded by the watchlist, which is the scope of the whole feature.** Most countries render nothing here. Widening it to the exchange's full inventory means a matcher, and a matcher is Stage 3's problem to prove.
+
+**Stage 3 — per-event linkage: measured, and abandoned**
+
+> The stage was conditional on the measurement, and the measurement said no. Both candidate rules ran over the 200 most recent classified articles in `scripts/replay-prediction-link.ts`, which is kept for the same reason `replay-market-link.ts` is: this is an obvious idea and it will be proposed again.
+
+- [x] **Rule A — country ∩ country, same category** — fired on 21.5% of articles, and 19 of those drew four markets each. That is not a link but the list of markets about that country, which the region panel already gives without pinning it to an unrelated headline. "Syria's president makes first Visa payment after sanctions removal" drew impeachment, the Panama Canal, a US–China trade agreement and the annexation of Canada
+- [x] **Rule B — resolution entity ∈ event actors, same category** — the rule this stage originally named. Fired on 5.5% and failed more quietly, which is worse: the entity is named in the story and the market resolves on something else about it. "Trump 'not in a hurry' over Iran" drew the impeachment market; "SpaceX launches Starlink satellites" drew a Mars landing; a strike in Gaza drew Israeli–Saudi normalisation. Right subject, wrong question. It is also bounded from the start — the markets that resolve on conditions rather than on anyone's actions ("Recession in 2027?") have no entity for an actor list to match
+- [x] **Decided against** — the failure is the same in both: co-occurrence is not aboutness. Judging whether a story bears on a market means reading it against that market's resolution criteria, which is a judgement over free text, which is the one thing this feature does not do. The rule was written, measured and deleted rather than shipped at a confidence it had not earned — the same ending `relation` had, for the same reason
+
+**Where this leaves the feature.** Markets appear on the two surfaces that are about a *set* of things — the world, in the prediction panel; a country, in the region panel — where a loose fit costs a reader nothing. They do not appear beside a single story, and on this evidence they should not.
+
+---
+
 ## Completed
 
 > Features fully implemented and stable.
