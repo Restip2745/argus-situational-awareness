@@ -21,8 +21,10 @@ export interface PredictionMarket {
   url:             string
   /** Null when this market has no history and so cannot be rewound. */
   historyKey:      string | null
-  /** Null for a market asked for by slug rather than taken from the watchlist. */
+  /** Null for a market asked for by id rather than taken from the watchlist. */
   category:        EventCategory | null
+  /** Countries this market is a reading of; empty for one about no country. */
+  countries:       string[]
 }
 
 interface State {

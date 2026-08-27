@@ -24,7 +24,7 @@ import { fetchQuotes, fetchHistories, isValidRange, MAX_SYMBOLS } from './servic
 import {
   fetchMarkets, fetchSeries, isValidWindow, isProviderName, MAX_IDS, PROVIDER_NAMES,
 } from './services/prediction'
-import { watchedIds, categoryOf } from './config/predictionMarkets'
+import { watchedIds, categoryOf, countriesOf } from './config/predictionMarkets'
 import { getPredictionConfig, setPredictionConfig } from './config/predictionConfig'
 import {
   resolveEventLimit, validateExportParams, validateEventId, validateLlmConfigBody,
@@ -647,9 +647,13 @@ app.get('/api/prediction/markets', async (req, res) => {
       logger.info('[prediction]', `${provider}: ${missing.length} watchlist id(s) returned nothing:`, missing.join(', '))
     }
 
-    // Category travels with the row so the panel can group these the way the
-    // rest of the interface groups events, without being handed the table too.
-    res.json(markets.map((m) => ({ ...m, category: categoryOf(provider, m.id) })))
+    // Category and countries travel with the row so the two panels can group
+    // and filter these without being handed the watchlist table as well.
+    res.json(markets.map((m) => ({
+      ...m,
+      category:  categoryOf(provider, m.id),
+      countries: countriesOf(provider, m.id),
+    })))
   } catch (err) {
     logger.warn('[prediction]', 'market fetch failed:', (err as Error).message)
     res.json([])

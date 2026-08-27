@@ -22,6 +22,7 @@ import type { ArgusEvent } from '../../types'
 import { linkableEntityNames } from '../../utils/entityLinker'
 import { EntityGlyph } from './EntityGlyph'
 import { RegionIndices } from './RegionIndices'
+import { RegionMarkets } from './RegionMarkets'
 import { eventTitle } from '../../lib/eventText'
 
 export type RegionTab = 'overview' | 'events' | 'profile'
@@ -349,6 +350,7 @@ export function RegionPanelTabContent({
 
         {/* Market indices — renders nothing for a country the table has none for */}
         <RegionIndices country={country.name} />
+        <RegionMarkets country={country.name} />
 
         {!info && (
           <div style={{ color: '#2a4060', fontSize: '10px', letterSpacing: '0.08em' }}>

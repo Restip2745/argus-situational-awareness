@@ -34,9 +34,28 @@ import type { ProviderName } from '../services/prediction'
 
 export interface WatchedMarket {
   /** Provider-scoped id: a Kalshi event ticker, or a Polymarket slug. */
-  id:       string
+  id:         string
   /** Which of the nine categories this belongs under, for grouping. */
-  category: EventCategory
+  category:   EventCategory
+  /**
+   * Countries this market is a reading of, by the names `countryData.ts` uses,
+   * or absent for one that is about no country in particular.
+   *
+   * Stated here rather than derived, and that is the whole design. The plan had
+   * been to attach markets to countries by the source's own tags — but of
+   * Kalshi's 220 tags exactly four are countries (Iran, Brazil, Hungary, Peru),
+   * incidentally rather than as a taxonomy, so there is nothing to read. The
+   * alternative was matching country names against the question text, which
+   * brings back the failure this feature was shaped to avoid, only smaller:
+   * Turkey, Chad, Jordan and Georgia are each a country and each something
+   * else.
+   *
+   * Left off deliberately where a market is about no country. A Mars landing is
+   * not a reading of the United States, and filing it under one because the
+   * rocket leaves from there would be the category error the index table
+   * records about sector indices.
+   */
+  countries?: string[]
 }
 
 /**
@@ -59,25 +78,28 @@ export interface WatchedMarket {
 export const KALSHI_WATCHLIST: WatchedMarket[] = [
   // ── Armed conflict ───────────────────────────────────────
   // Normalisation rather than hostilities, for want of anything closer.
-  { id: 'KXABRAHAMSA-29',  category: 'ARMED_CONFLICT' },
-  { id: 'KXABRAHAMSY-29',  category: 'ARMED_CONFLICT' },
+  { id: 'KXABRAHAMSA-29',  category: 'ARMED_CONFLICT', countries: ['Israel', 'Saudi Arabia'] },
+  { id: 'KXABRAHAMSY-29',  category: 'ARMED_CONFLICT', countries: ['Israel', 'Syria'] },
 
   // ── Political ────────────────────────────────────────────
-  { id: 'KXIMPEACH-29',    category: 'POLITICAL' },
-  { id: 'KXCANAL-29',      category: 'POLITICAL' },
-  { id: 'KXFTAPRC-29',     category: 'POLITICAL' },
-  { id: 'KXCANTERRITORY-29', category: 'POLITICAL' },
+  { id: 'KXIMPEACH-29',    category: 'POLITICAL', countries: ['United States of America'] },
+  // Panama has no entry in `countryData.ts` and so no panel to hang this on;
+  // it is filed under the country whose action it is about.
+  { id: 'KXCANAL-29',      category: 'POLITICAL', countries: ['United States of America'] },
+  { id: 'KXFTAPRC-29',     category: 'POLITICAL', countries: ['United States of America', 'China'] },
+  { id: 'KXCANTERRITORY-29', category: 'POLITICAL', countries: ['United States of America', 'Canada'] },
 
   // ── Economic ─────────────────────────────────────────────
   // The status bar already carries oil, gold and copper as prices. These answer
   // what those cannot: not what a thing costs now, but what is expected of it.
-  { id: 'KXRECSSNBER-27',  category: 'ECONOMIC' },
-  { id: 'CHINAUSGDP',      category: 'ECONOMIC' },
+  { id: 'KXRECSSNBER-27',  category: 'ECONOMIC', countries: ['United States of America'] },
+  { id: 'CHINAUSGDP',      category: 'ECONOMIC', countries: ['China', 'United States of America'] },
 
   // ── Science / tech ───────────────────────────────────────
-  { id: 'NYTOAI-27DEC31',  category: 'SCIENCE_TECH' },
+  { id: 'NYTOAI-27DEC31',  category: 'SCIENCE_TECH', countries: ['United States of America'] },
 
   // ── Space ────────────────────────────────────────────────
+  // No countries, deliberately: a Mars landing is a reading of none of them.
   { id: 'KXSPACEXMARS-30', category: 'SPACE' },
   { id: 'KXBLUESPACEX-30', category: 'SPACE' },
 ]
@@ -94,16 +116,16 @@ export const KALSHI_WATCHLIST: WatchedMarket[] = [
  */
 export const POLYMARKET_WATCHLIST: WatchedMarket[] = [
   // ── Armed conflict ───────────────────────────────────────
-  { id: 'russia-ukraine-ceasefire-in-2026',           category: 'ARMED_CONFLICT' },
-  { id: 'israel-hamas-ceasefire-by-december-31-2026', category: 'ARMED_CONFLICT' },
+  { id: 'russia-ukraine-ceasefire-in-2026',           category: 'ARMED_CONFLICT', countries: ['Russia', 'Ukraine'] },
+  { id: 'israel-hamas-ceasefire-by-december-31-2026', category: 'ARMED_CONFLICT', countries: ['Israel'] },
 
   // ── Political ────────────────────────────────────────────
-  { id: 'us-government-shutdown-in-2026',             category: 'POLITICAL' },
-  { id: 'new-uk-prime-minister-in-2026',              category: 'POLITICAL' },
+  { id: 'us-government-shutdown-in-2026',             category: 'POLITICAL', countries: ['United States of America'] },
+  { id: 'new-uk-prime-minister-in-2026',              category: 'POLITICAL', countries: ['United Kingdom'] },
 
   // ── Economic ─────────────────────────────────────────────
-  { id: 'fed-rate-cut-in-september-2026',             category: 'ECONOMIC' },
-  { id: 'us-recession-in-2026',                       category: 'ECONOMIC' },
+  { id: 'fed-rate-cut-in-september-2026',             category: 'ECONOMIC', countries: ['United States of America'] },
+  { id: 'us-recession-in-2026',                       category: 'ECONOMIC', countries: ['United States of America'] },
 
   // ── Science / tech ───────────────────────────────────────
   { id: 'openai-releases-gpt-6-in-2026',              category: 'SCIENCE_TECH' },
@@ -136,4 +158,16 @@ export function watchedIds(provider: ProviderName): string[] {
 /** Category lookup, so the panel need not be sent the table twice. */
 export function categoryOf(provider: ProviderName, id: string): EventCategory | null {
   return watchlistFor(provider).find((m) => m.id === id)?.category ?? null
+}
+
+/**
+ * Countries a market is a reading of, empty for one about no country.
+ *
+ * Sent with the row rather than served from a filter endpoint of its own: the
+ * region panel wants the same watchlist the prediction panel already asks for,
+ * and the same cached answer, so filtering it where it lands costs nothing and
+ * keeps this table on one side of the wire.
+ */
+export function countriesOf(provider: ProviderName, id: string): string[] {
+  return watchlistFor(provider).find((m) => m.id === id)?.countries ?? []
 }

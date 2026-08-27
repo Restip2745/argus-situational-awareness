@@ -109,7 +109,8 @@
       "economic": "經濟風險評估",
       "political": "政治穩定性分析"
     },
-    "indices": "股市指數"
+    "indices": "股市指數",
+    "predictionMarkets": "預測市場"
   },
   "canvas": {
     "toggle": "標記畫布",

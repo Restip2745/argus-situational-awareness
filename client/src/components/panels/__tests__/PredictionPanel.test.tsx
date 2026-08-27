@@ -40,6 +40,7 @@ const market = (over: Partial<PredictionMarket> = {}): PredictionMarket => ({
   url:             'https://polymarket.com/event/ceasefire-2027',
   historyKey:      'KXCEASE|KXCEASE-27',
   category:        'ARMED_CONFLICT',
+  countries:       ['Israel'],
   ...over,
 })
 

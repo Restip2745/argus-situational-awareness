@@ -211,9 +211,16 @@ Strategic goals and milestone tracking for the ARGUS satellite/event tracker pro
 - [x] **Two faults found by running it** — the daily move was empty on every row, measured from a window exactly as wide as the request that fed it; and half the history requests were being throttled under a sixteen-way fan-out, with the misses cached, stranding rows un-rewindable for five minutes over a hiccup. Neither was visible in the tests, because both parsers were given data
 - [x] **README** — two-source table, per-source watchlists, the volume-unit difference, and a troubleshooting note: a blocked domain presents as a certificate error rather than a timeout, which reads as a broken upstream or a broken build
 
-**Stage 2 — region panel (tag matching only)**
+**Stage 2 — region panel**
 
-- [ ] **Region markets row** — markets attached to a country by the upstream's own tags, still no model in the path; reuses the `RegionIndices` row pattern. Rows stop being hand-picked here, so an excluded-topic filter lands with this item
+> Planned as tag matching and delivered as a stated mapping, because the tags do not exist. Of Kalshi's 220 series tags exactly four are countries — Iran, Brazil, Hungary, Peru — incidentally rather than as a taxonomy. Matching country names against the question text was the alternative and reintroduces the failure this feature is shaped around, only smaller: Turkey, Chad, Jordan and Georgia are each a country and each something else.
+
+- [x] **Region markets row** — `RegionMarkets.tsx` beside `RegionIndices`, on the same reasoning: it is a reading of a place rather than of something the reader clicked. Filters the watchlist the prediction panel has already fetched, so it costs no extra request
+- [x] **Countries stated, not derived** — `WatchedMarket.countries`, written down beside each market and travelling with the row. Absent where a market is about no country: a Mars landing is not a reading of the United States, and filing it under the launching country would be the category error the index table records about sector indices
+- [x] **No excluded-topic filter needed** — it was on this list because rows were to stop being hand-picked here. They do not: the mapping is as hand-maintained as the watchlist, so distasteful subjects stay out by construction rather than by filter
+- [ ] **Verify in the running app** — the data path was checked live (11 rows, 6 countries, 2 deliberately untagged) and the component has unit coverage, but the panel itself was not opened: reaching a region panel needs either the WebGL globe, which does not render in the available browser pane, or a classified event to click through from
+
+**Bounded by the watchlist, which is the scope of the whole feature.** Most countries render nothing here. Widening it to the exchange's full inventory means a matcher, and a matcher is Stage 3's problem to prove.
 
 **Stage 3 — per-event linkage (gated on 1–2 holding up)**
 
