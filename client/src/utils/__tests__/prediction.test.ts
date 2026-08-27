@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   formatMarketPrice, formatPoints, pointsColor, formatResolves, formatVolume,
+  priceAt, changePointsAt,
 } from '../prediction'
 
 const NOW = Date.parse('2026-08-27T12:00:00Z')
@@ -97,5 +98,70 @@ describe('formatVolume', () => {
   it('survives a number that is not one', () => {
     expect(formatVolume(NaN)).toBe('—')
     expect(formatVolume(-1)).toBe('—')
+  })
+})
+
+// ── Rewinding ────────────────────────────────────────────────────────────────
+
+describe('priceAt', () => {
+  const T = (h: number) => new Date(Date.parse('2026-08-27T00:00:00Z') + h * 3600_000).toISOString()
+  const at = (h: number) => Date.parse(T(h))
+  const points = [
+    { t: T(0), price: 0.20 },
+    { t: T(6), price: 0.25 },
+    { t: T(12), price: 0.31 },
+  ]
+
+  it('takes the last price at or before the instant', () => {
+    expect(priceAt(points, at(6))).toBe(0.25)
+    expect(priceAt(points, at(9))).toBe(0.25)
+    expect(priceAt(points, at(12))).toBe(0.31)
+  })
+
+  it('never reaches forward to a price that had not happened yet', () => {
+    // At 05:00 the market was still at 0.20. Showing 0.25 because it is the
+    // nearest print would put a future price on a past instant.
+    expect(priceAt(points, at(5))).toBe(0.20)
+  })
+
+  it('says nothing for an instant before the market had a price', () => {
+    // Not a gap to paper over: a market that opened this morning genuinely had
+    // no price at 3am.
+    expect(priceAt(points, at(-1))).toBeNull()
+    expect(priceAt([], at(6))).toBeNull()
+  })
+
+  it('does not depend on the upstream sending points in order', () => {
+    const shuffled = [points[2], points[0], points[1]]
+    expect(priceAt(shuffled, at(9))).toBe(0.25)
+  })
+})
+
+describe('changePointsAt', () => {
+  const T = (h: number) => new Date(Date.parse('2026-08-27T00:00:00Z') + h * 3600_000).toISOString()
+  const at = (h: number) => Date.parse(T(h))
+
+  it('measures the day ending at the instant, not the day ending now', () => {
+    // The whole point of rewinding: a price from six hours ago beside a change
+    // measured to right now is two numbers that cannot both be true.
+    const points = [
+      { t: T(0),  price: 0.20 },
+      { t: T(24), price: 0.25 },
+      { t: T(48), price: 0.40 },
+    ]
+    expect(changePointsAt(points, at(24))).toBeCloseTo(5, 6)
+    expect(changePointsAt(points, at(48))).toBeCloseTo(15, 6)
+  })
+
+  it('carries the sign of a fall', () => {
+    const points = [{ t: T(0), price: 0.30 }, { t: T(24), price: 0.22 }]
+    expect(changePointsAt(points, at(24))).toBeCloseTo(-8, 6)
+  })
+
+  it('says nothing when the series does not reach a full day back', () => {
+    // A shorter window would answer a different question than the column asks,
+    // and would do it silently.
+    const points = [{ t: T(20), price: 0.30 }, { t: T(24), price: 0.22 }]
+    expect(changePointsAt(points, at(24))).toBeNull()
   })
 })

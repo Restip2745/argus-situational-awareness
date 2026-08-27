@@ -79,3 +79,63 @@ export function formatVolume(usd: number): string {
   if (usd >= 1_000)     return `$${Math.round(usd / 1_000)}K`
   return `$${Math.round(usd)}`
 }
+
+// ── Rewinding ────────────────────────────────────────────────────────────────
+
+/** One point of a market's price series, as `/api/prediction/history` sends it. */
+export interface PricePoint {
+  /** ISO 8601. */
+  t:     string
+  /** YES price as a fraction, 0–1. */
+  price: number
+}
+
+/**
+ * The price at an instant, or null when the series cannot say.
+ *
+ * The last point *at or before* the instant, never the nearest one. Reaching
+ * forward to the next print would show a price that did not exist yet at the
+ * moment the reader is looking at — the same rule `changeSince` follows for a
+ * close series, and for the same reason.
+ *
+ * Null for an instant before the series starts. That is not a gap to paper
+ * over: a market that opened this morning genuinely had no price at 3am, and
+ * the honest answer to "what was it then" is that there was no it.
+ */
+export function priceAt(points: PricePoint[], at: number): number | null {
+  if (points.length === 0) return null
+
+  // Sorted defensively: the endpoint hands these over in upstream order, and
+  // nothing here should depend on that staying true.
+  const ordered = [...points].sort((a, b) => Date.parse(a.t) - Date.parse(b.t))
+
+  let found: number | null = null
+  for (const p of ordered) {
+    if (Date.parse(p.t) <= at) found = p.price
+    else break
+  }
+  return found
+}
+
+/** The window the daily move is measured over, matching the upstream's own. */
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The daily move as it stood at an instant, in percentage points, or null.
+ *
+ * Recomputed rather than carried over from the live figure. A rewound panel
+ * showing a price from six hours ago beside a change measured to right now
+ * would be two numbers that cannot both be true — precisely what scene time
+ * exists to prevent, and the sort of contradiction that is invisible because
+ * both halves render perfectly.
+ *
+ * Null when the series does not reach a full day before the instant. An
+ * incomplete window would answer a different question than the column asks,
+ * quietly.
+ */
+export function changePointsAt(points: PricePoint[], at: number): number | null {
+  const now = priceAt(points, at)
+  const then = priceAt(points, at - DAY_MS)
+  if (now === null || then === null) return null
+  return (now - then) * 100
+}

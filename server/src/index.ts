@@ -21,7 +21,11 @@ import { getHealthSnapshot, startOllamaHealthPoll } from './services/healthTrack
 import { checkRateLimit } from './services/rateLimiter'
 import { resolveConflictSources, loadConflictFronts } from './services/conflictSources'
 import { fetchQuotes, fetchHistories, isValidRange, MAX_SYMBOLS } from './services/market'
-import { fetchMarkets, fetchHistory, isValidWindow, MAX_SLUGS } from './services/prediction'
+// Aliased: `market.ts` already exports a `fetchHistories`, and the two return
+// different shapes for different upstreams.
+import {
+  fetchMarkets, fetchHistories as fetchPredictionHistories, isValidWindow, MAX_SLUGS,
+} from './services/prediction'
 import { WATCHED_SLUGS, categoryOf } from './config/predictionMarkets'
 import {
   resolveEventLimit, validateExportParams, validateEventId, validateLlmConfigBody,
@@ -653,14 +657,15 @@ app.get('/api/prediction/markets', async (req, res) => {
 })
 
 // ── Prediction History ────────────────────────────────────
-// One market's price over time, for the timeline. Takes a slug rather than the
-// CLOB token the upstream keys history on: the token is an implementation
-// detail of a second service, and resolving it here costs a cache hit on a
-// market the caller has almost certainly just fetched.
+// Prices over time, for the timeline. Takes slugs rather than the CLOB tokens
+// the upstream keys history on: the token is an implementation detail of a
+// second service, and resolving it here costs a cache hit on markets the caller
+// has almost certainly just fetched.
 //
-// One slug at a time, deliberately. The watchlist is sixteen rows and these
-// payloads are large; the panel charts the market a reader picked, not all of
-// them at once.
+// Several at once, because that is how the scrub needs them. Rewinding moves
+// the whole interface to an instant, so every row has to move together — one
+// row priced an hour ago beside eight priced now is the contradiction scene
+// time exists to prevent.
 
 app.get('/api/prediction/history', async (req, res) => {
   const histIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
@@ -669,26 +674,30 @@ app.get('/api/prediction/history', async (req, res) => {
     res.status(429).json({ error: 'Rate limited — please wait 60 seconds' }); return
   }
 
-  const slug = String(req.query.slug ?? '').trim().toLowerCase()
+  const slugs = String(req.query.slugs ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, MAX_SLUGS)
   const windowParam = String(req.query.window ?? '1d')
-  if (!slug || !isValidWindow(windowParam)) {
-    res.json(null)
+  if (slugs.length === 0 || !isValidWindow(windowParam)) {
+    res.json([])
     return
   }
 
   try {
     // A market with no token id can be priced but not charted; so can one that
-    // has resolved since the panel opened. Both end here as null, which is the
-    // same thing the caller does with either: draw no line.
-    const [market] = await fetchMarkets([slug])
-    if (!market?.yesTokenId) {
-      res.json(null)
-      return
-    }
-    res.json(await fetchHistory(slug, market.yesTokenId, windowParam))
+    // resolved since the panel opened. Both drop out here, which is the same
+    // thing the caller does with either: draw no line for that row.
+    const markets = await fetchMarkets(slugs)
+    const chartable = markets
+      .filter((m): m is typeof m & { yesTokenId: string } => m.yesTokenId !== null)
+      .map((m) => ({ slug: m.slug, tokenId: m.yesTokenId }))
+
+    res.json(await fetchPredictionHistories(chartable, windowParam))
   } catch (err) {
     logger.warn('[prediction]', 'history fetch failed:', (err as Error).message)
-    res.json(null)
+    res.json([])
   }
 })
 

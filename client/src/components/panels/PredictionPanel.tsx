@@ -2,10 +2,13 @@ import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../../store'
 import { usePanelDrag } from '../../hooks/usePanelDrag'
 import { usePredictionMarkets, type PredictionMarket } from '../../hooks/usePredictionMarkets'
+import { usePredictionHistories } from '../../hooks/usePredictionHistories'
+import { useSceneTime } from '../../hooks/useSceneTime'
 import { categoryTint, categoryLabel } from '../../data/symbology'
 import { Panel } from './Panel'
 import {
   formatMarketPrice, formatPoints, pointsColor, formatResolves, formatVolume,
+  priceAt, changePointsAt,
 } from '../../utils/prediction'
 import type { UpColor } from '../../utils/quote'
 
@@ -37,6 +40,11 @@ const REFRESH_MS = 60 * 1000
  *
  * Grouped by the same nine categories as everything else, so a reader moving
  * from the filter bar to here does not have to learn a second vocabulary.
+ *
+ * Rewinds with the timeline rather than hiding from it. The live-only layers —
+ * flights, satellites, ships — disappear in retrospect because they have a
+ * position now and no history to show instead. A market that trades around the
+ * clock does have a price at 03:00, so these rows stay and move to it.
  */
 export function PredictionPanel() {
   const { t } = useTranslation()
@@ -48,18 +56,39 @@ export function PredictionPanel() {
     usePanelDrag({ panelKey: 'prediction', defaultPos: { x: 360, y: 100 } })
 
   const { markets, loading } = usePredictionMarkets(undefined, show ? REFRESH_MS : undefined)
+  const { now: sceneNow, isLive } = useSceneTime()
+  const series = usePredictionHistories(markets.map((m) => m.slug), show && !isLive)
 
   if (!show) return null
+
+  // Live, the markets endpoint has already said everything. Scrubbed, both
+  // numbers are recomputed from the series — carrying the live change over
+  // beside a rewound price would be two figures that cannot both be true.
+  const byslug = new Map(series.map((s) => [s.slug, s.points]))
+  const rows: Row[] = []
+  for (const m of markets) {
+    if (isLive) {
+      rows.push({ market: m, price: m.price, changePoints: m.change24hPoints })
+      continue
+    }
+    const points = byslug.get(m.slug) ?? []
+    const price = priceAt(points, sceneNow)
+    // Dropped, not blanked. At an instant before this market opened there is no
+    // price to show and no row to hang one on — the same absence the quote
+    // routes answer with a missing symbol rather than an empty one.
+    if (price === null) continue
+    rows.push({ market: m, price, changePoints: changePointsAt(points, sceneNow) })
+  }
 
   // Grouped in the order the rows arrive, which is the order the watchlist file
   // declares them. That list is maintained by hand and reads top to bottom;
   // re-sorting it here would hide the shape its maintainer gave it.
-  const groups: Array<[string, PredictionMarket[]]> = []
-  for (const m of markets) {
-    const key = m.category ?? 'OTHER'
+  const groups: Array<[string, Row[]]> = []
+  for (const r of rows) {
+    const key = r.market.category ?? 'OTHER'
     const last = groups[groups.length - 1]
-    if (last && last[0] === key) last[1].push(m)
-    else groups.push([key, [m]])
+    if (last && last[0] === key) last[1].push(r)
+    else groups.push([key, [r]])
   }
 
   return (
@@ -80,7 +109,7 @@ export function PredictionPanel() {
         maxHeight: `calc(${100 / uiScale}vh - 140px)`,
       }}
     >
-      {markets.length === 0 ? (
+      {rows.length === 0 ? (
         <div style={{ padding: '14px 12px', fontSize: '10px', color: '#3d5568', lineHeight: 1.8 }}>
           {loading
             ? t('prediction.loading', 'READING MARKETS…')
@@ -93,7 +122,20 @@ export function PredictionPanel() {
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '6px 10px 10px' }}>
-          {groups.map(([cat, rows]) => (
+          {/* One date line for the whole panel, because in retrospect every row
+              shares the instant. Live it is omitted: "now" needs no stamp, and
+              a timestamp that only ever reads as the current minute would be
+              noise on the one surface here whose numbers really are current. */}
+          {!isLive && (
+            <div style={{
+              fontSize: '10px', letterSpacing: '0.12em', color: ACCENT,
+              opacity: 0.75, paddingBottom: '2px',
+            }}>
+              {t('prediction.asOf', 'AS OF')} {new Date(sceneNow).toISOString().slice(11, 16)} UTC
+            </div>
+          )}
+
+          {groups.map(([cat, group]) => (
             <div key={cat} style={{ marginTop: '8px' }}>
               <div style={{
                 color: categoryTint(cat), fontSize: '10px', letterSpacing: '0.15em',
@@ -101,8 +143,14 @@ export function PredictionPanel() {
               }}>
                 {categoryLabel(cat)}
               </div>
-              {rows.map((m) => (
-                <MarketRow key={m.slug} market={m} upColor={upColor} />
+              {group.map((r) => (
+                <MarketRow
+                  key={r.market.slug}
+                  market={r.market}
+                  price={r.price}
+                  changePoints={r.changePoints}
+                  upColor={upColor}
+                />
               ))}
             </div>
           ))}
@@ -123,8 +171,14 @@ export function PredictionPanel() {
   )
 }
 
-interface RowProps {
-  market:  PredictionMarket
+/** A market with the two numbers resolved for the instant being displayed. */
+interface Row {
+  market:       PredictionMarket
+  price:        number
+  changePoints: number | null
+}
+
+interface RowProps extends Row {
   upColor: UpColor
 }
 
@@ -142,7 +196,7 @@ interface RowProps {
  * to get there — and going there is the only interaction offered. Nothing in
  * this app takes a position.
  */
-export function MarketRow({ market, upColor }: RowProps) {
+export function MarketRow({ market, price, changePoints, upColor }: RowProps) {
   const { t } = useTranslation()
 
   return (
@@ -171,14 +225,14 @@ export function MarketRow({ market, upColor }: RowProps) {
           color: '#e8dcc8', fontVariantNumeric: 'tabular-nums',
           width: '38px', textAlign: 'right',
         }}>
-          {formatMarketPrice(market.price)}
+          {formatMarketPrice(price)}
         </span>
 
         <span style={{
-          color: pointsColor(market.change24hPoints, upColor),
+          color: pointsColor(changePoints, upColor),
           fontVariantNumeric: 'tabular-nums', width: '62px', textAlign: 'right',
         }}>
-          {formatPoints(market.change24hPoints)}
+          {formatPoints(changePoints)}
         </span>
 
         <span style={{ flex: 1 }} />

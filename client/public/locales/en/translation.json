@@ -431,6 +431,7 @@
     "footnote": "Market price of the YES side, not a probability. Not an investment tool.",
     "openMarket": "Open this market at the source",
     "volume": "Traded volume",
-    "noResolveDate": "No fixed resolution date"
+    "noResolveDate": "No fixed resolution date",
+    "asOf": "AS OF"
   }
 }

@@ -397,6 +397,27 @@ export async function fetchHistory(
   }
 }
 
+/**
+ * Series for several markets at once, with unresolvable ones simply absent.
+ *
+ * This was one slug at a time to begin with, on the reasoning that a panel
+ * charts the market a reader picked rather than all of them. The timeline
+ * falsified that: scrubbing rewinds the whole interface, so every row has to
+ * move together or the panel shows one price from an hour ago beside eight from
+ * now. Fetched as a batch because that is how they are needed — one round trip
+ * the first time a reader scrubs, served from cache after.
+ */
+export async function fetchHistories(
+  markets: Array<{ slug: string; tokenId: string }>,
+  window: PriceWindow,
+): Promise<PriceSeries[]> {
+  const wanted = markets.filter((m) => isValidSlug(m.slug)).slice(0, MAX_SLUGS)
+  const series = await Promise.all(
+    wanted.map((m) => fetchHistory(m.slug, m.tokenId, window)),
+  )
+  return series.filter((s): s is PriceSeries => s !== null)
+}
+
 // ── Fetching ─────────────────────────────────────────────────────────────────
 
 async function fetchMarket(slug: string): Promise<PredictionMarket | null> {
