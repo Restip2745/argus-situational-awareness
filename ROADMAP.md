@@ -234,7 +234,17 @@ Strategic goals and milestone tracking for the ARGUS satellite/event tracker pro
 
 **Where this leaves the feature.** Markets appear on the two surfaces that are about a *set* of things — the world, in the prediction panel; a country, in the region panel — where a loose fit costs a reader nothing. They do not appear beside a single story.
 
-**And what a Stage 3 v2 would look like**, since the measurement inverted the tension this stage was built on. The thought was that a large market inventory would need a matcher and a matcher was what we refused; the matcher works, and the small hand-picked list is what starves it. So: pull a wide candidate set from the exchange for the event's own country and category, and have the model judge those against their settlement criteria — one call per event rather than eleven per article. Selection stops being hand-curated there, so the excluded-topic filter Stage 2 retired would come back with it.
+**Stage 3 v2 — a wide pool, judged (not started)**
+
+> The measurement inverted the tension this stage was built on. The thought was that a large market inventory would need a matcher, and a matcher was what we refused. The matcher works; the small hand-picked list is what starves it. So v2 goes the other way round — a wide candidate pool, judged against settlement criteria, one call per event rather than eleven per article.
+>
+> Gated on the first item the way v1 was gated on its replay. If a wider pool does not lift the rate, nothing below is worth building, and this stays where it is.
+
+- [ ] **Measure the pool first, before any of it is built** — take the exchange's open single-market events above a volume floor (a survey in August found ~54 that qualified against the 11 the watchlist holds), put them in front of the model over 200 articles, and see whether the link rate moves off the floor. Rerun the trap set at the same time: a pool five times larger is five times the chance of a plausible wrong answer, so precision has to be re-established, not assumed
+- [ ] **Pool construction, which is the open problem** — Kalshi has no country tags, so a pool cannot be built the way Stage 2's mapping was. Category and volume are available and topical rather than geographic; anything sharper risks becoming the text matcher this feature exists to avoid. If the pool cannot be narrowed honestly, the answer is a bigger prompt rather than a cleverer filter, and that has its own limit
+- [ ] **Lazy, at panel open** — not at classification time. Most events are never opened, so linking on ingest spends inference on almost every article to serve almost none; and a link stored at classification goes stale as markets resolve, which lazy evaluation avoids for free. Different from `market_link`, which is computed on ingest because its six commodity classes never change
+- [ ] **Excluded-topic filter returns** — Stage 2 retired it because rows stayed hand-picked. They stop being hand-picked here, so the subjects this interface has no business showing come back with the pool
+- [ ] **Same bar as everything else in this phase** — ids validated against the list they were given, absence as the normal answer, and delete rather than ship if the distribution says it is not discriminating. `scripts/replay-llm-link.ts` already runs this shape and takes `--positives` and `--model=`
 
 ---
 
