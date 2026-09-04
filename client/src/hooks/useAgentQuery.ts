@@ -38,7 +38,7 @@ export interface AgentAnswer {
   kind:      'answer'
   id:        string
   question:  string
-  html:      string   // sanitized HTML (final) or raw partial text (while streaming)
+  html:      string   // sanitized HTML, partial while the answer is still arriving
   streaming: boolean  // true while tokens are arriving
 }
 
@@ -56,6 +56,16 @@ export interface AgentSubjectAdded {
 export type AgentEntry = AgentAnswer | AgentSubjectAdded
 
 const MAX_CONTEXT_CHARS = 8000
+
+/**
+ * How often a partial answer is re-rendered.
+ *
+ * Each repaint sanitises the whole answer so far, so painting per token is
+ * quadratic in the length of the answer. At this interval a long answer costs a
+ * few hundred passes over a few kilobytes, and the text still arrives faster
+ * than it can be read.
+ */
+const PAINT_INTERVAL_MS = 33
 
 /** True while a request is in flight and its answer has yet to say anything. */
 export function awaitingFirstToken(history: AgentEntry[]): boolean {
@@ -179,6 +189,7 @@ export function useAgentQuery(subject?: string | readonly AgentSubject[]) {
       let   buffer  = ''
       let   rawText = ''
       let   doneReceived = false
+      let   lastPaint = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -197,9 +208,18 @@ export function useAgentQuery(subject?: string | readonly AgentSubject[]) {
             if (parsed.error) throw new Error(parsed.error)
             if (parsed.text) {
               rawText += parsed.text
-              setHistory(h => h.map((e) =>
-                e.id === entryId ? { ...e, html: rawText } : e
-              ))
+              // Sanitised on the way in, not only at the end: what is shown
+              // mid-stream is injected as HTML exactly like the finished answer,
+              // so it has to pass the same whitelist. Throttled because each pass
+              // reparses the whole answer so far.
+              const now = Date.now()
+              if (now - lastPaint >= PAINT_INTERVAL_MS) {
+                lastPaint = now
+                const partial = sanitizeHtml(rawText)
+                setHistory(h => h.map((e) =>
+                  e.id === entryId ? { ...e, html: partial } : e
+                ))
+              }
             }
           } catch { /* malformed chunk — skip */ }
         }

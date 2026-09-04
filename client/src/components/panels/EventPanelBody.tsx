@@ -17,6 +17,7 @@ import type { ArgusEvent } from '../../types'
 import type { SelectedCountry } from '../../store'
 import { useAppStore } from '../../store'
 import { awaitingFirstToken, type AgentEntry } from '../../hooks/useAgentQuery'
+import { AgentAnswerBlock } from './AgentAnswerBlock'
 import { SubjectAddedNote } from './SubjectAddedNote'
 import { linkableEntityNames, LinkedText } from '../../utils/entityLinker'
 import { EntityGlyph } from './EntityGlyph'
@@ -612,21 +613,7 @@ export function EventPanelBody({
             {agentHistory.map((entry) => entry.kind === 'subject-added' ? (
               <SubjectAddedNote key={entry.id} labels={entry.labels} accentColor={accentColor} />
             ) : (
-              <div key={entry.id} className="mb-2">
-                <div className="text-[10px] mb-1 opacity-70" style={{ color: accentColor }}>▸ {entry.question}</div>
-                {entry.streaming ? (
-                  <div className="text-[11px] leading-relaxed" style={{ color: '#8aabbf', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {entry.html || <span className="text-[#2a4060]">●●●</span>}
-                    {entry.html && <span className="agent-stream-cursor" />}
-                  </div>
-                ) : (
-                  <div
-                    className="agent-response text-[11px] leading-relaxed"
-                    style={{ color: '#8aabbf' }}
-                    dangerouslySetInnerHTML={{ __html: entry.html }}
-                  />
-                )}
-              </div>
+              <AgentAnswerBlock key={entry.id} entry={entry} accentColor={accentColor} />
             ))}
             <div ref={agentScrollRef} />
           </div>

@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { awaitingFirstToken, type AgentEntry } from '../../hooks/useAgentQuery'
+import { AgentAnswerBlock } from './AgentAnswerBlock'
 import { SubjectAddedNote } from './SubjectAddedNote'
 
 interface Props {
@@ -69,23 +70,7 @@ export function RegionPanelAgent({
             {history.map((entry) => entry.kind === 'subject-added' ? (
               <SubjectAddedNote key={entry.id} labels={entry.labels} accentColor="#00d4ff" />
             ) : (
-              <div key={entry.id} style={{ marginBottom: '7px' }}>
-                <div style={{ color: '#00d4ff', fontSize: '10px', letterSpacing: '0.08em', marginBottom: '3px', opacity: 0.7 }}>
-                  ▸ {entry.question}
-                </div>
-                {entry.streaming ? (
-                  <div style={{ color: '#8aabbf', fontSize: '11px', lineHeight: 1.6 }}>
-                    {entry.html}
-                    <span className="agent-stream-cursor" />
-                  </div>
-                ) : (
-                  <div
-                    className="agent-response"
-                    dangerouslySetInnerHTML={{ __html: entry.html }}
-                    style={{ color: '#8aabbf', fontSize: '11px', lineHeight: 1.6 }}
-                  />
-                )}
-              </div>
+              <AgentAnswerBlock key={entry.id} entry={entry} accentColor="#00d4ff" />
             ))}
             <div ref={agentScrollRef} />
           </div>

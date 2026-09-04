@@ -4,6 +4,7 @@ import { entityQueries } from '../../lib/suggestedQueries'
 import { useAppStore } from '../../store'
 import { usePanelDrag } from '../../hooks/usePanelDrag'
 import { useAgentQuery, awaitingFirstToken } from '../../hooks/useAgentQuery'
+import { AgentAnswerBlock } from './AgentAnswerBlock'
 import { SubjectAddedNote } from './SubjectAddedNote'
 import { usePopoutWindow } from '../../hooks/usePopoutWindow'
 import { getCachedWikiSummary, useWikiCacheVersion } from '../../hooks/useWikiSummary'
@@ -282,23 +283,7 @@ export function WikiPanel() {
               {history.map(entry => entry.kind === 'subject-added' ? (
                 <SubjectAddedNote key={entry.id} labels={entry.labels} accentColor={ACCENT} />
               ) : (
-                <div key={entry.id} style={{ marginBottom: '7px' }}>
-                  <div style={{ color: ACCENT, fontSize: '10px', letterSpacing: '0.08em', marginBottom: '3px', opacity: 0.7 }}>
-                    ▸ {entry.question}
-                  </div>
-                  {entry.streaming ? (
-                    <div style={{ color: '#8aabbf', fontSize: '11px', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {entry.html || <span style={{ color: '#2a4060' }}>●●●</span>}
-                      {entry.html && <span className="agent-stream-cursor" />}
-                    </div>
-                  ) : (
-                    <div
-                      className="agent-response"
-                      dangerouslySetInnerHTML={{ __html: entry.html }}
-                      style={{ color: '#8aabbf', fontSize: '11px', lineHeight: 1.6 }}
-                    />
-                  )}
-                </div>
+                <AgentAnswerBlock key={entry.id} entry={entry} accentColor={ACCENT} />
               ))}
               <div ref={agentScrollRef} />
             </div>

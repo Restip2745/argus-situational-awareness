@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useAgentQuery, type AgentAnswer, type AgentEntry } from '../useAgentQuery'
 
 const answers = (h: AgentEntry[]) => h.filter((e): e is AgentAnswer => e.kind === 'answer')
@@ -260,5 +260,65 @@ describe('useAgentQuery — subject isolation', () => {
     // Stuck loading would leave the send button disabled on the new subject.
     expect(result.current.loading).toBe(false)
     expect(result.current.history).toHaveLength(0)
+  })
+})
+
+/**
+ * What the reader sees before the answer is finished.
+ *
+ * The panels used to show the raw stream as text, so an unclosed `<p>` sat on
+ * screen as literal markup until the last token arrived and the whole answer was
+ * finally parsed. It is sanitised on the way in now, which also closes what the
+ * model has not closed yet — an HTML parser does that with any document that
+ * ends early.
+ */
+describe('useAgentQuery — partial answers', () => {
+  beforeEach(() => { vi.stubGlobal('fetch', vi.fn()) })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function openStream() {
+    let push!: (chunk: string) => void
+    let close!: () => void
+    const enc = new TextEncoder()
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        start(ctrl) {
+          push  = (c) => ctrl.enqueue(enc.encode(c))
+          close = () => ctrl.close()
+        },
+      }),
+    } as unknown as Response)
+    return { push: (c: string) => push(c), close: () => close() }
+  }
+
+  it('closes a tag the model has not closed yet', async () => {
+    const stream = openStream()
+    const { result } = renderHook(() => useAgentQuery())
+    act(() => { void result.current.ask('q', '') })
+    await act(async () => { await Promise.resolve() })
+
+    await act(async () => { stream.push(sseChunk('<p>half a sen')) })
+    await waitFor(() => expect(answers(result.current.history)[0]?.html).toBe('<p>half a sen</p>'))
+    expect(answers(result.current.history)[0].streaming).toBe(true)
+
+    await act(async () => { stream.push(sseChunk('tence</p>')); stream.push(sseDone()); stream.close() })
+    await waitFor(() => expect(answers(result.current.history)[0].streaming).toBe(false))
+    expect(answers(result.current.history)[0].html).toBe('<p>half a sentence</p>')
+  })
+
+  it('applies the whitelist to a partial answer, not only to the finished one', async () => {
+    // What is shown mid-stream is injected as HTML exactly like the finished
+    // answer, so it has to pass the same sanitizer.
+    const stream = openStream()
+    const { result } = renderHook(() => useAgentQuery())
+    act(() => { void result.current.ask('q', '') })
+    await act(async () => { await Promise.resolve() })
+
+    await act(async () => { stream.push(sseChunk('<p>ok</p><script>alert(1)</scr')) })
+    await waitFor(() => expect(answers(result.current.history)[0]?.html).toContain('ok'))
+    expect(answers(result.current.history)[0].html).not.toContain('<script')
+
+    await act(async () => { stream.push(sseDone()); stream.close() })
   })
 })

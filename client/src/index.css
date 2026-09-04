@@ -197,7 +197,25 @@ canvas {
 }
 
 /* ── Streaming response cursor ────────────────────────────── */
+/* The cursor rides the end of the streamed text. It is a pseudo-element on the
+   last block rather than a sibling span, because the answer is rendered HTML
+   while it streams and a span after it would sit on its own line below. */
+.agent-response.is-streaming > *:last-child::after,
 .agent-stream-cursor {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 10px;
+  background: rgba(0, 212, 255, 0.7);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: cursorBlink 0.8s step-end infinite;
+}
+/* An answer that has begun with bare text has no last block to hang the cursor
+   on. Kept as its own rule: an unsupported :has() invalidates a whole selector
+   list, which would take the cursor above down with it. */
+.agent-response.is-streaming:not(:has(*))::after {
+  content: '';
   display: inline-block;
   width: 6px; height: 10px;
   background: rgba(0, 212, 255, 0.7);

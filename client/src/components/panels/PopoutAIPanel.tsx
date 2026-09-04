@@ -6,7 +6,8 @@
  * has full situational awareness of the displayed data.
  */
 import { useRef, useState, useEffect } from 'react'
-import { useAgentQuery, awaitingFirstToken, type AgentEntry, type AgentSubject } from '../../hooks/useAgentQuery'
+import { useAgentQuery, awaitingFirstToken, type AgentSubject } from '../../hooks/useAgentQuery'
+import { AgentAnswerBlock } from './AgentAnswerBlock'
 import { SubjectAddedNote } from './SubjectAddedNote'
 
 interface Props {
@@ -26,30 +27,6 @@ interface Props {
   subject?: string | readonly AgentSubject[]
 }
 
-function AgentEntry({ entry }: { entry: AgentEntry }) {
-  if (entry.kind === 'subject-added') {
-    return <SubjectAddedNote labels={entry.labels} accentColor="#00d4ff" />
-  }
-  return (
-    <div style={{ marginBottom: '10px' }}>
-      <div style={{ color: '#00d4ff', fontSize: '10px', letterSpacing: '0.08em', marginBottom: '4px', opacity: 0.7 }}>
-        ▸ {entry.question}
-      </div>
-      {entry.streaming ? (
-        <div style={{ color: '#8aabbf', fontSize: '10px', lineHeight: 1.7 }}>
-          {entry.html}
-          <span className="agent-stream-cursor" />
-        </div>
-      ) : (
-        <div
-          className="agent-response"
-          dangerouslySetInnerHTML={{ __html: entry.html }}
-          style={{ color: '#8aabbf', fontSize: '10px', lineHeight: 1.7 }}
-        />
-      )}
-    </div>
-  )
-}
 
 export function PopoutAIPanel({ agentContext, suggestedQueries = [], label = 'INTELLIGENCE AGENT', subject }: Props) {
   const { history, loading, error, ask, clear } = useAgentQuery(subject)
@@ -134,7 +111,9 @@ export function PopoutAIPanel({ agentContext, suggestedQueries = [], label = 'IN
             Ask the intelligence agent about this data.
           </div>
         )}
-        {history.map((entry) => <AgentEntry key={entry.id} entry={entry} />)}
+        {history.map((entry) => entry.kind === 'subject-added'
+          ? <SubjectAddedNote key={entry.id} labels={entry.labels} accentColor="#00d4ff" />
+          : <AgentAnswerBlock key={entry.id} entry={entry} accentColor="#00d4ff" compact />)}
         {loading && awaitingFirstToken(history) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: '#2a4060', fontSize: '10px', letterSpacing: '0.15em' }}>ANALYZING</span>
